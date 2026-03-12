@@ -1,9 +1,17 @@
-# 🔒 Action Gate
+# Action Gate
 
-**Action Gate** is a GitHub App that gates GitHub Actions workflows and jobs with ownership attestations. Before a workflow-modifying pull request can merge — or a workflow can run — the relevant files and jobs must be vouched for by an authorised person or organisation.
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Action Gate Logo" width="160" />
+</p>
 
-[![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg)](package.json)
+<p align="center">
+  <strong>Action Gate</strong> is a GitHub App that gates GitHub Actions workflows and jobs with ownership attestations. Before a workflow-modifying pull request can merge — or a workflow can run — the relevant files and jobs must be vouched for by an authorised person or organisation.
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue.svg" alt="License"/></a>
+  <a href="package.json"><img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen.svg" alt="Node.js"/></a>
+</p>
 
 ---
 

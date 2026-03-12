@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Clip portcullis to shield shape -->
+    <clipPath id="shieldClip">
+      <path d="M256 78 L402 136 L402 292 Q402 398 256 452 Q110 398 110 292 L110 136 Z"/>
+    </clipPath>
+
+    <!-- Background gradient -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#161b22"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+
+    <!-- Shield gradient -->
+    <linearGradient id="shieldGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1c2d4e"/>
+      <stop offset="100%" stop-color="#091830"/>
+    </linearGradient>
+
+    <!-- Badge gradient -->
+    <linearGradient id="badgeGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#2ea043"/>
+      <stop offset="100%" stop-color="#1a7f37"/>
+    </linearGradient>
+
+    <!-- Glow filter for shield edge -->
+    <filter id="glow" x="-15%" y="-15%" width="130%" height="130%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="88" fill="url(#bgGrad)"/>
+
+  <!-- Subtle background grid lines (depth effect) -->
+  <line x1="0" y1="128" x2="512" y2="128" stroke="#1f2937" stroke-width="1" opacity="0.4"/>
+  <line x1="0" y1="256" x2="512" y2="256" stroke="#1f2937" stroke-width="1" opacity="0.4"/>
+  <line x1="0" y1="384" x2="512" y2="384" stroke="#1f2937" stroke-width="1" opacity="0.4"/>
+  <line x1="128" y1="0" x2="128" y2="512" stroke="#1f2937" stroke-width="1" opacity="0.4"/>
+  <line x1="256" y1="0" x2="256" y2="512" stroke="#1f2937" stroke-width="1" opacity="0.4"/>
+  <line x1="384" y1="0" x2="384" y2="512" stroke="#1f2937" stroke-width="1" opacity="0.4"/>
+
+  <!-- Shield glow halo -->
+  <path d="M256 78 L402 136 L402 292 Q402 398 256 452 Q110 398 110 292 L110 136 Z"
+        fill="none" stroke="#388bfd" stroke-width="20" opacity="0.18" filter="url(#glow)"/>
+
+  <!-- Shield body -->
+  <path d="M256 78 L402 136 L402 292 Q402 398 256 452 Q110 398 110 292 L110 136 Z"
+        fill="url(#shieldGrad)"/>
+
+  <!-- Shield border -->
+  <path d="M256 78 L402 136 L402 292 Q402 398 256 452 Q110 398 110 292 L110 136 Z"
+        fill="none" stroke="#388bfd" stroke-width="7" opacity="0.85"/>
+
+  <!-- === PORTCULLIS inside shield === -->
+  <g clip-path="url(#shieldClip)">
+
+    <!-- Top horizontal bar (solid, full opacity) -->
+    <rect x="110" y="136" width="292" height="36" fill="#388bfd" rx="5"/>
+
+    <!-- Vertical bars (portcullis style, with pointed bottoms via polygons) -->
+    <!-- Bar 1 -->
+    <rect x="155" y="136" width="32" height="280" fill="#388bfd" rx="4" opacity="0.85"/>
+    <polygon points="155,416 187,416 171,448" fill="#388bfd" opacity="0.85"/>
+
+    <!-- Bar 2 -->
+    <rect x="228" y="136" width="32" height="295" fill="#388bfd" rx="4" opacity="0.85"/>
+    <polygon points="228,431 260,431 244,463" fill="#388bfd" opacity="0.85"/>
+
+    <!-- Bar 3 -->
+    <rect x="301" y="136" width="32" height="280" fill="#388bfd" rx="4" opacity="0.85"/>
+    <polygon points="301,416 333,416 317,448" fill="#388bfd" opacity="0.85"/>
+
+    <!-- Second horizontal bar -->
+    <rect x="110" y="240" width="292" height="24" fill="#388bfd" rx="4" opacity="0.45"/>
+
+    <!-- Third horizontal bar -->
+    <rect x="110" y="320" width="292" height="22" fill="#388bfd" rx="4" opacity="0.25"/>
+
+  </g>
+
+  <!-- === CHECK BADGE (bottom-center, overlaid on shield) === -->
+  <!-- Dark ring to separate badge from shield -->
+  <circle cx="256" cy="420" r="58" fill="#0d1117"/>
+  <!-- Badge circle -->
+  <circle cx="256" cy="420" r="50" fill="url(#badgeGrad)"/>
+  <!-- Badge border -->
+  <circle cx="256" cy="420" r="50" fill="none" stroke="#3fb950" stroke-width="4" opacity="0.6"/>
+  <!-- Checkmark -->
+  <path d="M228 421 L247 440 L290 392"
+        stroke="white" stroke-width="16" fill="none"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Small "AG" text badge in top-left corner of background (subtle branding) -->
+  <text x="32" y="492" font-family="'SF Mono', 'Fira Code', monospace" font-size="22"
+        fill="#388bfd" opacity="0.35" font-weight="600" letter-spacing="2">AG</text>
+
+</svg>
