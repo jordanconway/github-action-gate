@@ -545,12 +545,16 @@ $("vouch-form").addEventListener("submit", async (e) => {
         clearAuthToken();
         showLoggedOut();
         closeModal();
-        alert("Your session has expired \u2014 please log in again.");
+        alert('Your session has expired \u2014 please log in again.');
+      } else if (res.status === 409) {
+        closeModal();
+        loadRecentRuns();
+        loadAttestations();
       } else {
-        $("form-error").textContent = msg;
-        $("form-error").hidden = false;
-        $("form-submit").disabled = false;
-        $("form-submit").textContent = "Submit attestation";
+        $('form-error').textContent = msg;
+        $('form-error').hidden = false;
+        $('form-submit').disabled = false;
+        $('form-submit').textContent = 'Submit attestation';
       }
       return;
     }
@@ -613,12 +617,14 @@ function renderRunRow(run) {
   const repoFull = run.repository
     ? `${run.repository.owner}/${run.repository.name}`
     : "";
-  const vouchBtn = repoFull
+  const vouchBtn = repoFull && !run.isAttested
     ? `<button class="btn btn-primary btn-sm btn-vouch-run"
          data-repo="${escapeHtml(repoFull)}"
          data-workflow="${escapeHtml(run.workflowPath)}"
          title="Vouch for this workflow">Vouch</button>`
-    : "";
+    : repoFull
+      ? `<span class="badge badge-success" title="Active attestation exists">✓ Vouched</span>`
+      : "";
 
   return `<tr>
     <td>${repo}</td>
@@ -639,12 +645,16 @@ async function loadRecentRuns() {
   try {
     const data = await apiFetch("/api/v1/runs/recent?limit=10");
     const runs = data.runs ?? [];
-    $("runs-count").textContent = runs.length > 0 ? `${runs.length} most recent` : "";
+    // Filter out runs that are already attested at the workflow level.
+    const unvouched = runs.filter((r) => !r.isAttested);
+    $('runs-count').textContent = unvouched.length > 0
+      ? `${unvouched.length} unvouched run${unvouched.length !== 1 ? 's' : ''}`
+      : '';
 
-    if (runs.length === 0) {
-      $("runs-body").innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--color-muted);padding:24px;">No workflow runs recorded yet \u2014 runs will appear here after the app processes its first webhook.</td></tr>`;
+    if (unvouched.length === 0) {
+      $('runs-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--color-muted);padding:24px;">All recent workflow runs have active attestations — nothing to vouch for.</td></tr>`;
     } else {
-      $("runs-body").innerHTML = runs.map(renderRunRow).join("");
+      $('runs-body').innerHTML = unvouched.map(renderRunRow).join('');
     }
 
     $("runs-loading").hidden = true;

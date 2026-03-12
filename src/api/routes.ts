@@ -174,6 +174,24 @@ export function createApiRouter(): Router {
             ? expiry_days
             : repoRecord.expiryDays;
 
+        // Reject if an active attestation already exists for this exact target.
+        const jobArg = typeof job_name === "string" ? job_name : null;
+        const existing = await prisma.attestation.findFirst({
+          where: {
+            repositoryId: repoRecord.id,
+            workflowPath: workflow_path,
+            jobName: jobArg,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+        });
+        if (existing) {
+          res.status(409).json({
+            error: `An active attestation for this ${jobArg ? "job" : "workflow"} already exists (id: ${existing.id}). Revoke it first if you need to re-vouch.`,
+          });
+          return;
+        }
+
         const attestation = await createAttestation({
           repositoryId: repoRecord.id,
           workflowPath: workflow_path,
@@ -446,7 +464,38 @@ export function createApiRouter(): Router {
           repository: { select: { owner: true, name: true } },
         },
       });
-      res.json({ runs });
+
+      // Determine which workflow paths already have an active attestation
+      // so the dashboard can hide the Vouch button / filter the row.
+      const now = new Date();
+      const uniqueTargets = [...new Set(
+        runs
+          .filter((r) => r.repositoryId)
+          .map((r) => `${r.repositoryId}::${r.workflowPath}`)
+      )];
+
+      const activeAttestations = uniqueTargets.length
+        ? await prisma.attestation.findMany({
+            where: {
+              repositoryId: { in: [...new Set(runs.map((r) => r.repositoryId))] },
+              jobName: null,   // workflow-level only
+              revokedAt: null,
+              expiresAt: { gt: now },
+            },
+            select: { repositoryId: true, workflowPath: true },
+          })
+        : [];
+
+      const attestedSet = new Set(
+        activeAttestations.map((a) => `${a.repositoryId}::${a.workflowPath}`)
+      );
+
+      const enriched = runs.map((r) => ({
+        ...r,
+        isAttested: attestedSet.has(`${r.repositoryId}::${r.workflowPath}`),
+      }));
+
+      res.json({ runs: enriched });
     } catch {
       res.status(500).json({ error: "Internal server error" });
     }
