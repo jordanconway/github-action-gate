@@ -329,12 +329,58 @@ function showLoggedIn(user) {
   $("user-avatar").alt = `@${escapeHtml(user.login)}`;
   $("user-login").textContent = `@${user.login}`;
   $("btn-vouch").hidden = false;
+  loadUserOrgs(getAuthToken());
 }
 
 function showLoggedOut() {
   $("btn-login").hidden = false;
   $("user-info").hidden = true;
   $("btn-vouch").hidden = true;
+  cachedOrgs = [];
+  populateOrgSelect();
+}
+
+// ── GitHub org fetching ───────────────────────────────────────────────────
+
+let cachedOrgs = [];
+
+async function loadUserOrgs(token) {
+  if (!token) return;
+  $("orgs-loading-hint").hidden = false;
+  try {
+    const res = await fetch("https://api.github.com/user/orgs?per_page=100", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!res.ok) return;
+    cachedOrgs = await res.json();
+    populateOrgSelect();
+  } catch {
+    // Non-fatal — user can still type an org manually via the Other option.
+  } finally {
+    $("orgs-loading-hint").hidden = true;
+  }
+}
+
+function populateOrgSelect() {
+  const sel = $("f-org-select");
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">Select an organization…</option>`;
+  cachedOrgs.forEach((org) => {
+    const opt = document.createElement("option");
+    opt.value = org.login;
+    opt.textContent = org.login;
+    sel.appendChild(opt);
+  });
+  const other = document.createElement("option");
+  other.value = "__other__";
+  other.textContent = "Other (enter manually)…";
+  sel.appendChild(other);
+  // Restore previous selection if it's still valid.
+  if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
 }
 
 $("btn-login").addEventListener("click", () => {
@@ -359,6 +405,7 @@ function closeModal() {
   document.body.style.overflow = "";
   $("vouch-form").reset();
   $("org-login-row").hidden = true;
+  $("org-login-custom-row").hidden = true;
   $("form-error").hidden = true;
   $("form-submit").disabled = false;
   $("form-submit").textContent = "Submit attestation";
@@ -379,7 +426,14 @@ document.addEventListener("keydown", (e) => {
 $("f-tier").addEventListener("change", () => {
   const isOrg = $("f-tier").value === "organization";
   $("org-login-row").hidden = !isOrg;
-  if (isOrg) $("f-org-login").focus();
+  if (!isOrg) $("org-login-custom-row").hidden = true;
+  if (isOrg) $("f-org-select").focus();
+});
+
+$("f-org-select").addEventListener("change", () => {
+  const isOther = $("f-org-select").value === "__other__";
+  $("org-login-custom-row").hidden = !isOther;
+  if (isOther) $("f-org-login").focus();
 });
 
 $("vouch-form").addEventListener("submit", async (e) => {
@@ -403,11 +457,15 @@ $("vouch-form").addEventListener("submit", async (e) => {
   }
 
   const tier = $("f-tier").value;
-  const orgLogin = $("f-org-login").value.trim() || null;
+  const orgSelectVal = $("f-org-select").value;
+  const orgLogin = orgSelectVal === "__other__"
+    ? ($("f-org-login").value.trim() || null)
+    : (orgSelectVal || null);
 
   if (tier === "organization" && !orgLogin) {
-    $("form-error").textContent =
-      "GitHub org login is required for organization-tier attestations.";
+    $("form-error").textContent = orgSelectVal === "__other__"
+      ? "Please enter the org login manually."
+      : "Please select a GitHub organization.";
     $("form-error").hidden = false;
     return;
   }

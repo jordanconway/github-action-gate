@@ -152,6 +152,7 @@ pre code { background: none; border: none; padding: 0; }
 .btn-secondary { background: var(--color-surface); color: var(--color-text); }
 
 .btn-sm { padding: 3px 10px; font-size: 0.78rem; }
+.field-hint { display: block; font-size: 0.75rem; color: var(--color-muted); margin-top: 4px; font-style: italic; }
 
 /* ─── Recent runs section ───────────────────────────────────────────────── */
 .runs-section { margin-bottom: 28px; }
