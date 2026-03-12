@@ -1,0 +1,39 @@
+# GitHub App manifest
+# Use this to create/register the GitHub App at:
+#   https://github.com/settings/apps/new?manifest=...
+# or paste it into the manifest field when creating via the UI.
+
+name: Action Gate
+description: >-
+  Gate GitHub Actions workflows and jobs with ownership attestations.
+  Requires users or organizations to vouch for workflows before they
+  can run without a warning or block.
+url: https://github.com/linuxfoundation/github-action-gate
+
+hook_attributes:
+  url: https://your-deployment-url.com/api/github/webhooks
+  active: true
+
+redirect_url: https://your-deployment-url.com/auth/callback
+public: true
+
+# Permissions required by the app
+default_permissions:
+  # Create and update check runs (PR gate + runtime gate)
+  checks: write
+  # Read workflow YAML files and repository content
+  contents: read
+  # Required for all GitHub Apps
+  metadata: read
+  # List files changed in a pull request
+  pull_requests: read
+  # Read workflow runs and jobs (runtime gate)
+  actions: read
+
+# Webhook events the app subscribes to
+default_events:
+  - pull_request
+  - workflow_run
+  - workflow_job
+  - installation
+  - installation_repositories

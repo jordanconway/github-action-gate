@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Action Gate — Workflow Attestation Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+    <!--
+      ──────────────────────────────────────────────────────────────
+      CONFIGURATION — set this to your deployed Action Gate API URL.
+      When hosting on GitHub Pages, this must be the full URL of the
+      server where the app is running (CORS must allow your Pages origin).
+      ──────────────────────────────────────────────────────────────
+    -->
+    <script>
+      window.ACTION_GATE_API_URL = ""; // e.g. "https://action-gate.example.com"
+    </script>
+  </head>
+  <body>
+    <!-- ── Header ─────────────────────────────────────────────── -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <div class="logo">
+          <span class="logo-icon">🔒</span>
+          <span class="logo-text">Action Gate</span>
+        </div>
+        <p class="tagline">
+          Workflow &amp; job ownership attestations for GitHub Actions
+        </p>
+
+        <!-- Auth area —— populated / switched by app.js initAuth() -->
+        <div class="header-actions">
+          <div id="user-info" class="user-info" hidden>
+            <img id="user-avatar" class="user-avatar" src="" alt="" />
+            <span id="user-login" class="user-login"></span>
+            <button id="btn-logout" class="btn btn-secondary btn-sm">Logout</button>
+          </div>
+          <button id="btn-login" class="btn btn-primary btn-login-github">
+            <svg viewBox="0 0 16 16" aria-hidden="true" focusable="false">
+              <path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38l-.01-1.49c-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.64 7.64 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48l-.01 2.2c0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            Login with GitHub
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- ── Summary cards ──────────────────────────────────────── -->
+      <section class="stats-grid" id="stats-grid" aria-label="Summary statistics">
+        <div class="stat-card" id="stat-repos">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Repositories</div>
+        </div>
+        <div class="stat-card" id="stat-active">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Active Attestations</div>
+        </div>
+        <div class="stat-card warning" id="stat-expiring">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Expiring (30 days)</div>
+        </div>
+        <div class="stat-card" id="stat-total">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Total Attestations</div>
+        </div>
+      </section>
+
+      <!-- ── Filters ────────────────────────────────────────────── -->
+      <section class="filters" aria-label="Filters">
+        <div class="filter-row">
+          <div class="filter-group">
+            <label for="filter-status">Status</label>
+            <select id="filter-status">
+              <option value="active">Active only</option>
+              <option value="all">All (including expired)</option>
+            </select>
+          </div>
+          <div class="filter-group">
+            <label for="filter-org">Org / Affiliation</label>
+            <input
+              type="text"
+              id="filter-org"
+              placeholder="e.g. AMD or my-org"
+            />
+          </div>
+          <div class="filter-group">
+            <label for="filter-repo">Repository</label>
+            <input
+              type="text"
+              id="filter-repo"
+              placeholder="owner/repo"
+            />
+          </div>
+          <div class="filter-group">
+            <label for="filter-workflow">Workflow</label>
+            <input
+              type="text"
+              id="filter-workflow"
+              placeholder=".github/workflows/ci.yml"
+            />
+          </div>
+          <div class="filter-group">
+            <label for="filter-voucher">Voucher (GitHub login)</label>
+            <input
+              type="text"
+              id="filter-voucher"
+              placeholder="jsmith"
+            />
+          </div>
+          <div class="filter-actions">
+            <button id="btn-search" class="btn btn-primary">Search</button>
+            <button id="btn-reset" class="btn btn-secondary">Reset</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Attestations table ─────────────────────────────────── -->
+      <section class="table-section" aria-label="Attestations">
+        <div class="table-header">
+          <h2 class="table-title">Attestations</h2>
+          <span id="result-count" class="result-count"></span>
+          <button id="btn-vouch" class="btn btn-primary" hidden>
+            + Vouch for a Workflow
+          </button>
+        </div>
+
+        <div id="loading" class="loading-state" aria-live="polite">
+          Loading…
+        </div>
+        <div id="error-msg" class="error-state" hidden></div>
+
+        <div class="table-wrapper" id="table-wrapper" hidden>
+          <table id="attestations-table">
+            <thead>
+              <tr>
+                <th data-col="repository" class="sortable">
+                  Repository <span class="sort-icon"></span>
+                </th>
+                <th data-col="workflowPath" class="sortable">
+                  Workflow / Job <span class="sort-icon"></span>
+                </th>
+                <th data-col="tier">Tier</th>
+                <th data-col="voucherGithubLogin" class="sortable">
+                  Voucher <span class="sort-icon"></span>
+                </th>
+                <th data-col="voucherOrgAffiliation" class="sortable">
+                  Affiliation <span class="sort-icon"></span>
+                </th>
+                <th data-col="orgGithubLogin" class="sortable">
+                  Org (verified) <span class="sort-icon"></span>
+                </th>
+                <th data-col="notes">Notes</th>
+                <th data-col="expiresAt" class="sortable">
+                  Expires <span class="sort-icon"></span>
+                </th>
+                <th data-col="status">Status</th>
+              </tr>
+            </thead>
+            <tbody id="attestations-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination" hidden>
+          <button id="btn-prev" class="btn btn-secondary" disabled>
+            ← Previous
+          </button>
+          <span id="page-info"></span>
+          <button id="btn-next" class="btn btn-secondary">Next →</button>
+        </div>
+      </section>
+
+      <!-- ── How to vouch ───────────────────────────────────────── -->
+      <section class="how-to">
+        <h2>How to vouch for a workflow or job</h2>
+        <p>
+          Log in with the <strong>Login with GitHub</strong> button above to
+          create attestations directly from this dashboard, or use the REST API
+          with a GitHub personal access token that has at minimum
+          <code>read:org</code> scope.
+        </p>
+
+        <h3>User-tier attestation (entire workflow)</h3>
+        <pre><code>curl -X POST https://your-api.example.com/api/v1/attestations \
+  -H "Authorization: Bearer &lt;your-github-token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repository":     "owner/repo",
+    "workflow_path":  ".github/workflows/ci.yml",
+    "tier":           "user",
+    "org_affiliation": "AMD",
+    "notes":          "rocMinductor 4xl python 3.8 nightly test suite",
+    "expiry_days":    180
+  }'</code></pre>
+
+        <h3>Organization-tier attestation (single job)</h3>
+        <pre><code>curl -X POST https://your-api.example.com/api/v1/attestations \
+  -H "Authorization: Bearer &lt;your-github-token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "repository":      "owner/repo",
+    "workflow_path":   ".github/workflows/ci.yml",
+    "job_name":        "python-test-38",
+    "tier":            "organization",
+    "org_github_login": "my-github-org",
+    "org_affiliation": "AMD",
+    "notes":           "Owned by GPU software team"
+  }'</code></pre>
+
+        <h3>Update gate mode for a repository (admins only)</h3>
+        <pre><code>curl -X PUT https://your-api.example.com/api/v1/repositories/owner/repo/config \
+  -H "Authorization: Bearer &lt;your-github-token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{ "mode": "block", "expiry_days": 90 }'</code></pre>
+
+        <p>
+          Gate modes: <code>audit</code> (warn, don't block — default) or
+          <code>block</code> (fail the check run, blocking merges when configured
+          as a required status check).
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          Action Gate &mdash;
+          <a
+            href="https://github.com/linuxfoundation/github-action-gate"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </p>
+      </div>
+    </footer>
+
+    <!-- ── Attestation creation modal ─────────────────────────────────── -->
+    <div
+      id="vouch-modal"
+      class="modal-backdrop"
+      hidden
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+    >
+      <div class="modal-box">
+        <div class="modal-header">
+          <h3 id="modal-title">Vouch for a workflow</h3>
+          <button id="modal-close" class="modal-close" aria-label="Close">
+            &times;
+          </button>
+        </div>
+
+        <form id="vouch-form" novalidate>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-repo"
+                >Repository <span class="required">*</span></label
+              >
+              <input
+                type="text"
+                id="f-repo"
+                placeholder="owner/repo"
+                required
+                autocomplete="off"
+              />
+            </div>
+            <div class="form-group">
+              <label for="f-workflow"
+                >Workflow path <span class="required">*</span></label
+              >
+              <input
+                type="text"
+                id="f-workflow"
+                placeholder=".github/workflows/ci.yml"
+                required
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-job"
+                >Job name
+                <span class="optional"
+                  >(blank = attest whole workflow)</span
+                ></label
+              >
+              <input
+                type="text"
+                id="f-job"
+                placeholder="Optional"
+                autocomplete="off"
+              />
+            </div>
+            <div class="form-group">
+              <label for="f-tier">Attestation tier</label>
+              <select id="f-tier">
+                <option value="user">User</option>
+                <option value="organization">
+                  Organization (verified membership)
+                </option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row" id="org-login-row" hidden>
+            <div class="form-group">
+              <label for="f-org-login"
+                >GitHub org login <span class="required">*</span></label
+              >
+              <input
+                type="text"
+                id="f-org-login"
+                placeholder="my-github-org"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="f-affil"
+                >Org affiliation
+                <span class="optional">(self-reported, e.g. AMD)</span></label
+              >
+              <input
+                type="text"
+                id="f-affil"
+                placeholder="Optional"
+                autocomplete="off"
+              />
+            </div>
+            <div class="form-group">
+              <label for="f-expiry"
+                >Expiry days
+                <span class="optional">(default from repo config)</span></label
+              >
+              <input
+                type="number"
+                id="f-expiry"
+                placeholder="180"
+                min="1"
+                autocomplete="off"
+              />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group form-group-full">
+              <label for="f-notes">Notes</label>
+              <textarea
+                id="f-notes"
+                rows="3"
+                placeholder="Why are you vouching for this workflow?"
+              ></textarea>
+            </div>
+          </div>
+
+          <div id="form-error" class="form-error" hidden></div>
+
+          <div class="form-actions">
+            <button type="button" id="form-cancel" class="btn btn-secondary">
+              Cancel
+            </button>
+            <button type="submit" id="form-submit" class="btn btn-primary">
+              Submit attestation
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

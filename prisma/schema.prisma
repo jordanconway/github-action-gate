@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum GateMode {
+  /// Allow workflows/jobs to run but annotate the check with a warning.
+  AUDIT
+  /// Fail the check run and block the merge / run (requires branch protection).
+  BLOCK
+}
+
+enum AttestationTier {
+  /// An individual GitHub user is vouching (with an optional org affiliation).
+  USER
+  /// A GitHub organization is vouching (membership is verified at vouch time).
+  ORGANIZATION
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+/// One record per repository where the app is installed and has seen activity.
+model Repository {
+  id             String        @id @default(cuid())
+  /// GitHub's numeric repository ID (stable across renames).
+  githubId       Int           @unique
+  owner          String
+  name           String
+  /// GitHub App installation ID — used to create authenticated API requests.
+  installationId Int
+
+  // ── Gate configuration ──────────────────────────────────────────────────
+  /// Whether to block or only warn when a workflow/job is unattested.
+  /// Default is AUDIT (warn only). Set DEFAULT_GATE_MODE=block in .env to default to BLOCK.
+  mode           GateMode      @default(AUDIT)
+  /// How many days an attestation is valid before it must be re-verified.
+  expiryDays     Int           @default(180)
+
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  attestations   Attestation[]
+
+  @@unique([owner, name])
+  @@index([owner])
+}
+
+/// An attestation is a vouch by a user or organization for a specific
+/// workflow file, or for a named job within that workflow file.
+model Attestation {
+  id           String @id @default(cuid())
+  repositoryId String
+
+  /// Relative path from repo root, e.g. ".github/workflows/ci.yml"
+  workflowPath String
+  /// If null, the attestation covers the entire workflow file.
+  /// If set, it covers only this named job within the workflow.
+  jobName      String?
+
+  // ── Voucher identity ────────────────────────────────────────────────────
+  /// GitHub login of the person who created this attestation.
+  voucherGithubLogin    String
+  /// GitHub numeric user ID (stable across login renames).
+  voucherGithubId       Int
+  /// Self-reported company / organization affiliation (e.g. "AMD").
+  /// Not verified — purely informational label.
+  voucherOrgAffiliation String?
+
+  // ── Tier ────────────────────────────────────────────────────────────────
+  tier           AttestationTier
+  /// For ORGANIZATION tier: the GitHub org whose membership was verified.
+  orgGithubLogin String?
+
+  // ── Context ─────────────────────────────────────────────────────────────
+  /// Free-text description of why this workflow/job is being vouched for,
+  /// e.g. "rocMinductor 4xl python 3.8 nightly test suite".
+  notes          String?
+
+  // ── Lifecycle ────────────────────────────────────────────────────────────
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  /// GitHub login of whoever revoked this attestation (for audit trail).
+  revokedBy  String?
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  repository Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([repositoryId, workflowPath])
+  @@index([repositoryId, workflowPath, jobName])
+  @@index([voucherGithubLogin])
+  @@index([orgGithubLogin])
+  @@index([expiresAt])
+}

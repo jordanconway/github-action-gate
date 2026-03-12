@@ -1,0 +1,475 @@
+/* global ACTION_GATE_API_URL */
+"use strict";
+
+// ── Configuration ─────────────────────────────────────────────────────────────
+
+const API_BASE =
+  (typeof window !== "undefined" && window.ACTION_GATE_API_URL) ||
+  window.location.origin;
+
+// ── State ─────────────────────────────────────────────────────────────────────
+
+const state = {
+  page: 1,
+  perPage: 30,
+  totalPages: 1,
+  sortCol: "expiresAt",
+  sortDir: "asc", // "asc" | "desc"
+  filters: {
+    active_only: "true",
+    owner: "",
+    repo: "",
+    workflow: "",
+    voucher: "",
+    org: "",
+  },
+};
+
+// ── DOM references ────────────────────────────────────────────────────────────
+
+const $ = (id) => document.getElementById(id);
+
+const els = {
+  loading:   $("loading"),
+  errorMsg:  $("error-msg"),
+  wrapper:   $("table-wrapper"),
+  tbody:     $("attestations-body"),
+  count:     $("result-count"),
+  pagination: $("pagination"),
+  pageInfo:  $("page-info"),
+  btnPrev:   $("btn-prev"),
+  btnNext:   $("btn-next"),
+  filterStatus:   $("filter-status"),
+  filterOrg:      $("filter-org"),
+  filterRepo:     $("filter-repo"),
+  filterWorkflow: $("filter-workflow"),
+  filterVoucher:  $("filter-voucher"),
+  btnSearch: $("btn-search"),
+  btnReset:  $("btn-reset"),
+};
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+
+async function apiFetch(path) {
+  const url = `${API_BASE}${path}`;
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+// ── Rendering ─────────────────────────────────────────────────────────────────
+
+function expiryStatus(expiresAt, revokedAt) {
+  if (revokedAt) return { label: "Revoked", cls: "badge-revoked" };
+  const now = Date.now();
+  const exp = new Date(expiresAt).getTime();
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  if (exp < now) return { label: "Expired", cls: "badge-expired" };
+  if (exp - now < thirtyDays) return { label: "Expiring soon", cls: "badge-expiring" };
+  return { label: "Active", cls: "badge-active" };
+}
+
+function formatDate(iso) {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
+  });
+}
+
+function escapeHtml(str) {
+  if (!str) return "";
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function renderRow(a) {
+  const repo = a.repository
+    ? `${escapeHtml(a.repository.owner)}/${escapeHtml(a.repository.name)}`
+    : "—";
+  const workflowJob = a.jobName
+    ? `${escapeHtml(a.workflowPath)}<br/><span class="text-muted mono">job: ${escapeHtml(a.jobName)}</span>`
+    : `<span class="mono">${escapeHtml(a.workflowPath)}</span>`;
+  const tier = a.tier === "ORGANIZATION"
+    ? `<span class="badge badge-org">org</span>`
+    : `<span class="badge badge-user">user</span>`;
+  const voucher = `<a href="https://github.com/${escapeHtml(a.voucherGithubLogin)}" target="_blank" rel="noopener">@${escapeHtml(a.voucherGithubLogin)}</a>`;
+  const affil = escapeHtml(a.voucherOrgAffiliation) || '<span class="text-muted">—</span>';
+  const org = a.orgGithubLogin
+    ? `<a href="https://github.com/${escapeHtml(a.orgGithubLogin)}" target="_blank" rel="noopener">@${escapeHtml(a.orgGithubLogin)}</a>`
+    : '<span class="text-muted">—</span>';
+  const notes = a.notes
+    ? `<span title="${escapeHtml(a.notes)}">${escapeHtml(a.notes.length > 60 ? a.notes.slice(0, 57) + "…" : a.notes)}</span>`
+    : '<span class="text-muted">—</span>';
+  const expiry = formatDate(a.expiresAt);
+  const { label, cls } = expiryStatus(a.expiresAt, a.revokedAt);
+  const statusBadge = `<span class="badge ${cls}">${label}</span>`;
+
+  return `<tr>
+    <td class="mono">${repo}</td>
+    <td>${workflowJob}</td>
+    <td>${tier}</td>
+    <td>${voucher}</td>
+    <td>${affil}</td>
+    <td>${org}</td>
+    <td>${notes}</td>
+    <td>${expiry}</td>
+    <td>${statusBadge}</td>
+  </tr>`;
+}
+
+function renderTable(data) {
+  if (!data.attestations || data.attestations.length === 0) {
+    els.tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--color-muted);padding:32px;">No attestations found matching these filters.</td></tr>`;
+  } else {
+    els.tbody.innerHTML = data.attestations.map(renderRow).join("");
+  }
+
+  const total = data.total ?? 0;
+  els.count.textContent = `${total.toLocaleString()} result${total !== 1 ? "s" : ""}`;
+
+  state.totalPages = Math.max(1, Math.ceil(total / state.perPage));
+  els.pageInfo.textContent = `Page ${state.page} of ${state.totalPages}`;
+  els.btnPrev.disabled = state.page <= 1;
+  els.btnNext.disabled = state.page >= state.totalPages;
+
+  els.loading.hidden = true;
+  els.errorMsg.hidden = true;
+  els.wrapper.hidden = false;
+  els.pagination.hidden = state.totalPages <= 1;
+}
+
+// ── Data fetching ─────────────────────────────────────────────────────────────
+
+async function loadSummary() {
+  try {
+    const data = await apiFetch("/api/v1/summary");
+    $("stat-repos").querySelector(".stat-value").textContent =
+      (data.totalRepos ?? 0).toLocaleString();
+    $("stat-active").querySelector(".stat-value").textContent =
+      (data.activeAttestations ?? 0).toLocaleString();
+    $("stat-expiring").querySelector(".stat-value").textContent =
+      (data.expiringSoon ?? 0).toLocaleString();
+    $("stat-total").querySelector(".stat-value").textContent =
+      (data.totalAttestations ?? 0).toLocaleString();
+  } catch {
+    // Non-fatal — summary cards stay at "—".
+  }
+}
+
+async function loadAttestations() {
+  els.loading.hidden = false;
+  els.wrapper.hidden = true;
+  els.pagination.hidden = true;
+  els.errorMsg.hidden = true;
+
+  const params = new URLSearchParams({ page: state.page, per_page: state.perPage });
+
+  if (state.filters.active_only === "true") params.set("active_only", "true");
+  if (state.filters.owner) params.set("owner", state.filters.owner);
+  if (state.filters.repo)  params.set("repo",  state.filters.repo);
+  if (state.filters.workflow) params.set("workflow", state.filters.workflow);
+  if (state.filters.voucher)  params.set("voucher",  state.filters.voucher);
+  if (state.filters.org) {
+    // org can match either verified org login OR self-reported affiliation.
+    // The API supports filtering by org login; affiliation is client-side filtered below.
+    params.set("org", state.filters.org);
+  }
+
+  // Apply client-side sort preference to URL sort hint (future API feature).
+  // For now we sort the returned page client-side.
+  try {
+    const data = await apiFetch(`/api/v1/attestations?${params}`);
+
+    // Client-side sort on the current page.
+    if (data.attestations && state.sortCol) {
+      data.attestations.sort((a, b) => {
+        let va = getColValue(a, state.sortCol);
+        let vb = getColValue(b, state.sortCol);
+        if (va < vb) return state.sortDir === "asc" ? -1 : 1;
+        if (va > vb) return state.sortDir === "asc" ? 1 : -1;
+        return 0;
+      });
+    }
+
+    renderTable(data);
+  } catch (err) {
+    els.loading.hidden = true;
+    els.errorMsg.textContent = `Failed to load attestations: ${err.message}`;
+    els.errorMsg.hidden = false;
+  }
+}
+
+function getColValue(a, col) {
+  switch (col) {
+    case "repository":
+      return a.repository ? `${a.repository.owner}/${a.repository.name}` : "";
+    case "workflowPath": return `${a.workflowPath}/${a.jobName ?? ""}`;
+    case "voucherGithubLogin": return a.voucherGithubLogin ?? "";
+    case "voucherOrgAffiliation": return a.voucherOrgAffiliation ?? "";
+    case "orgGithubLogin": return a.orgGithubLogin ?? "";
+    case "expiresAt": return a.expiresAt ?? "";
+    default: return "";
+  }
+}
+
+// ── Sorting ───────────────────────────────────────────────────────────────────
+
+function initSorting() {
+  document.querySelectorAll("th.sortable").forEach((th) => {
+    th.addEventListener("click", () => {
+      const col = th.dataset.col;
+      if (state.sortCol === col) {
+        state.sortDir = state.sortDir === "asc" ? "desc" : "asc";
+      } else {
+        state.sortCol = col;
+        state.sortDir = "asc";
+      }
+      // Update sort indicator classes.
+      document.querySelectorAll("th.sortable").forEach((t) => {
+        t.classList.remove("sort-asc", "sort-desc");
+      });
+      th.classList.add(`sort-${state.sortDir}`);
+      state.page = 1;
+      loadAttestations();
+    });
+  });
+}
+
+// ── Events ────────────────────────────────────────────────────────────────────
+
+function applyFilters() {
+  const repoInput = els.filterRepo.value.trim();
+  const [ownerPart, repoPart] = repoInput.includes("/")
+    ? repoInput.split("/", 2)
+    : ["", repoInput];
+
+  state.filters.active_only = els.filterStatus.value === "active" ? "true" : "";
+  state.filters.owner = ownerPart || "";
+  state.filters.repo  = repoPart || "";
+  state.filters.workflow = els.filterWorkflow.value.trim();
+  state.filters.voucher  = els.filterVoucher.value.trim();
+  state.filters.org      = els.filterOrg.value.trim();
+  state.page = 1;
+  loadAttestations();
+}
+
+function resetFilters() {
+  els.filterStatus.value   = "active";
+  els.filterOrg.value      = "";
+  els.filterRepo.value     = "";
+  els.filterWorkflow.value = "";
+  els.filterVoucher.value  = "";
+  state.filters = { active_only: "true", owner: "", repo: "", workflow: "", voucher: "", org: "" };
+  state.page = 1;
+  loadAttestations();
+}
+
+els.btnSearch.addEventListener("click", applyFilters);
+els.btnReset.addEventListener("click", resetFilters);
+[els.filterOrg, els.filterRepo, els.filterWorkflow, els.filterVoucher].forEach((inp) => {
+  inp.addEventListener("keypress", (e) => { if (e.key === "Enter") applyFilters(); });
+});
+els.filterStatus.addEventListener("change", applyFilters);
+els.btnPrev.addEventListener("click", () => { state.page--; loadAttestations(); });
+els.btnNext.addEventListener("click", () => { state.page++; loadAttestations(); });
+
+// ── Auth ──────────────────────────────────────────────────────────────────────
+
+const AUTH_KEY = "ag_token";
+
+function getAuthToken() { return sessionStorage.getItem(AUTH_KEY); }
+function setAuthToken(t) { sessionStorage.setItem(AUTH_KEY, t); }
+function clearAuthToken() { sessionStorage.removeItem(AUTH_KEY); }
+
+async function initAuth() {
+  // Pick up the token that GitHub OAuth drops into the URL fragment, then
+  // clean the URL so the token does not remain visible or in browser history.
+  const hash = window.location.hash;
+  if (hash.startsWith("#token=")) {
+    const token = decodeURIComponent(hash.slice(7));
+    setAuthToken(token);
+    history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
+
+  const token = getAuthToken();
+  if (token) {
+    await loadCurrentUser(token);
+  } else {
+    showLoggedOut();
+  }
+}
+
+async function loadCurrentUser(token) {
+  try {
+    const res = await fetch("https://api.github.com/user", {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+      },
+    });
+    if (!res.ok) { clearAuthToken(); showLoggedOut(); return; }
+    const user = await res.json();
+    showLoggedIn(user);
+  } catch {
+    showLoggedOut();
+  }
+}
+
+function showLoggedIn(user) {
+  $("btn-login").hidden = true;
+  $("user-info").hidden = false;
+  $("user-avatar").src = user.avatar_url ?? "";
+  $("user-avatar").alt = `@${escapeHtml(user.login)}`;
+  $("user-login").textContent = `@${user.login}`;
+  $("btn-vouch").hidden = false;
+}
+
+function showLoggedOut() {
+  $("btn-login").hidden = false;
+  $("user-info").hidden = true;
+  $("btn-vouch").hidden = true;
+}
+
+$("btn-login").addEventListener("click", () => {
+  window.location.href = `${API_BASE}/auth/github`;
+});
+
+$("btn-logout").addEventListener("click", () => {
+  clearAuthToken();
+  showLoggedOut();
+});
+
+// ── Vouch modal ───────────────────────────────────────────────────────────────
+
+function openModal() {
+  $("vouch-modal").hidden = false;
+  $("f-repo").focus();
+  document.body.style.overflow = "hidden";
+}
+
+function closeModal() {
+  $("vouch-modal").hidden = true;
+  document.body.style.overflow = "";
+  $("vouch-form").reset();
+  $("org-login-row").hidden = true;
+  $("form-error").hidden = true;
+  $("form-submit").disabled = false;
+  $("form-submit").textContent = "Submit attestation";
+}
+
+$("btn-vouch").addEventListener("click", openModal);
+$("modal-close").addEventListener("click", closeModal);
+$("form-cancel").addEventListener("click", closeModal);
+
+$("vouch-modal").addEventListener("click", (e) => {
+  if (e.target === $("vouch-modal")) closeModal();
+});
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("vouch-modal").hidden) closeModal();
+});
+
+$("f-tier").addEventListener("change", () => {
+  const isOrg = $("f-tier").value === "organization";
+  $("org-login-row").hidden = !isOrg;
+  if (isOrg) $("f-org-login").focus();
+});
+
+$("vouch-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  $("form-error").hidden = true;
+
+  const token = getAuthToken();
+  if (!token) {
+    $("form-error").textContent = "You must be logged in to create attestations.";
+    $("form-error").hidden = false;
+    return;
+  }
+
+  const repo = $("f-repo").value.trim();
+  const workflowPath = $("f-workflow").value.trim();
+
+  if (!repo || !workflowPath) {
+    $("form-error").textContent = "Repository and workflow path are required.";
+    $("form-error").hidden = false;
+    return;
+  }
+
+  const tier = $("f-tier").value;
+  const orgLogin = $("f-org-login").value.trim() || null;
+
+  if (tier === "organization" && !orgLogin) {
+    $("form-error").textContent =
+      "GitHub org login is required for organization-tier attestations.";
+    $("form-error").hidden = false;
+    return;
+  }
+
+  const jobName    = $("f-job").value.trim()    || null;
+  const affil      = $("f-affil").value.trim()  || null;
+  const notes      = $("f-notes").value.trim()  || null;
+  const expiryRaw  = parseInt($("f-expiry").value, 10);
+  const expiryDays = Number.isFinite(expiryRaw) && expiryRaw > 0 ? expiryRaw : undefined;
+
+  $("form-submit").disabled = true;
+  $("form-submit").textContent = "Submitting\u2026";
+
+  const body = { repository: repo, workflow_path: workflowPath, tier };
+  if (jobName)    body.job_name          = jobName;
+  if (orgLogin)   body.org_github_login  = orgLogin;
+  if (affil)      body.org_affiliation   = affil;
+  if (notes)      body.notes             = notes;
+  if (expiryDays) body.expiry_days       = expiryDays;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/attestations`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      const msg = data.error || `HTTP ${res.status}`;
+      if (res.status === 401) {
+        clearAuthToken();
+        showLoggedOut();
+        closeModal();
+        alert("Your session has expired \u2014 please log in again.");
+      } else {
+        $("form-error").textContent = msg;
+        $("form-error").hidden = false;
+        $("form-submit").disabled = false;
+        $("form-submit").textContent = "Submit attestation";
+      }
+      return;
+    }
+
+    closeModal();
+    loadSummary();
+    loadAttestations();
+  } catch (err) {
+    $("form-error").textContent = `Request failed: ${err.message}`;
+    $("form-error").hidden = false;
+    $("form-submit").disabled = false;
+    $("form-submit").textContent = "Submit attestation";
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+
+initSorting();
+loadSummary();
+loadAttestations();
+initAuth();
