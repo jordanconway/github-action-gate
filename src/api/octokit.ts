@@ -8,4 +8,4 @@ import { retry } from "@octokit/plugin-retry";
  *
  * Defaults to 3 retries with exponential backoff.
  */
-export const RetryOctokit = Octokit.plugin(retry);
+export const RetryOctokit: typeof Octokit = Octokit.plugin(retry) as typeof Octokit;
