@@ -11,6 +11,32 @@ import {
 } from "../services/attestation";
 import { authenticateUser, AuthRequest } from "./middleware";
 import { prisma } from "../db/client";
+import { logger } from "../logger";
+
+// GitHub owner/repo names: alphanumeric, hyphens, dots, underscores; max 100 chars.
+const GITHUB_NAME_RE = /^[a-zA-Z0-9._-]{1,100}$/;
+// CUID format used by Prisma @default(cuid()) — 25-char lowercase alphanumeric.
+const CUID_RE = /^c[a-z0-9]{24}$/;
+
+/** Fire-and-forget audit log write. Never blocks the response. */
+function audit(
+  action: string,
+  actor: { login: string; id: number },
+  detail: Record<string, unknown>,
+  ipAddress?: string
+) {
+  prisma.auditLog
+    .create({
+      data: {
+        action,
+        actor: actor.login,
+        actorId: actor.id,
+        detail: JSON.stringify(detail),
+        ipAddress: ipAddress ?? null,
+      },
+    })
+    .catch((err) => logger.error({ err }, "audit log write failed"));
+}
 
 export function createApiRouter(): Router {
   const router = Router();
@@ -44,7 +70,7 @@ export function createApiRouter(): Router {
       });
       res.json(result);
     } catch (err) {
-      console.error("[action-gate] GET /attestations error:", err);
+      logger.error({ err }, "GET /attestations error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -52,6 +78,10 @@ export function createApiRouter(): Router {
   /** GET /api/v1/attestations/:id */
   router.get("/attestations/:id", async (req: Request, res: Response) => {
     try {
+      if (!CUID_RE.test(req.params.id)) {
+        res.status(400).json({ error: "Invalid attestation ID format" });
+        return;
+      }
       const attestation = await prisma.attestation.findUnique({
         where: { id: req.params.id },
         include: { repository: { select: { owner: true, name: true } } },
@@ -62,7 +92,7 @@ export function createApiRouter(): Router {
       }
       res.json(attestation);
     } catch (err) {
-      console.error("[action-gate] GET /attestations/:id error:", err);
+      logger.error({ err }, "GET /attestations/:id error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -204,6 +234,13 @@ export function createApiRouter(): Router {
           expiryDays,
         });
 
+        audit(
+          "attestation.create",
+          { login: req.user!.login, id: req.user!.id },
+          { attestationId: attestation.id, repository, workflow_path, tier: attestationTier },
+          req.ip
+        );
+
         res.status(201).json(attestation);
       } catch (err) {
         // Unique constraint violation from the partial index means a concurrent
@@ -215,7 +252,7 @@ export function createApiRouter(): Router {
           });
           return;
         }
-        console.error("[action-gate] POST /attestations error:", err);
+        logger.error({ err }, "POST /attestations error");
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -366,19 +403,21 @@ export function createApiRouter(): Router {
         const orgMembershipOk = new Map<string, boolean>();
         if (orgLoginSet.size > 0) {
           const userOctokit = new RetryOctokit({ auth: req.token });
-          await Promise.all(
+          const results = await Promise.allSettled(
             [...orgLoginSet].map(async (org) => {
-              try {
-                await userOctokit.orgs.checkMembershipForUser({
-                  org,
-                  username: req.user!.login,
-                });
-                orgMembershipOk.set(org, true);
-              } catch {
-                orgMembershipOk.set(org, false);
-              }
+              await userOctokit.orgs.checkMembershipForUser({
+                org,
+                username: req.user!.login,
+              });
+              return org;
             })
           );
+          for (const r of results) {
+            if (r.status === "fulfilled") {
+              orgMembershipOk.set(r.value, true);
+            }
+          }
+          // Orgs not in the map after settlement are treated as failed.
         }
 
         // ── Deduplicated repository lookups ────────────────────────────────
@@ -469,9 +508,19 @@ export function createApiRouter(): Router {
         results.sort((a, b) => a.index - b.index);
 
         const httpStatus = created > 0 && skipped === 0 && errors === 0 ? 201 : 207;
+
+        if (created > 0) {
+          audit(
+            "attestation.batch_create",
+            { login: req.user!.login, id: req.user!.id },
+            { created, skipped, errors, totalItems: items.length },
+            req.ip
+          );
+        }
+
         res.status(httpStatus).json({ results, summary: { created, skipped, errors } });
       } catch (err) {
-        console.error("[action-gate] POST /attestations/batch error:", err);
+        logger.error({ err }, "POST /attestations/batch error");
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -486,6 +535,10 @@ export function createApiRouter(): Router {
     authenticateUser as unknown as (req: Request, res: Response, next: () => void) => void,
     async (req: AuthRequest, res: Response) => {
       try {
+        if (!CUID_RE.test(req.params.id)) {
+          res.status(400).json({ error: "Invalid attestation ID format" });
+          return;
+        }
         const attestation = await prisma.attestation.findUnique({
           where: { id: req.params.id },
           include: { repository: true },
@@ -521,9 +574,21 @@ export function createApiRouter(): Router {
         }
 
         const revoked = await revokeAttestation(req.params.id, req.user!.login);
+
+        audit(
+          "attestation.revoke",
+          { login: req.user!.login, id: req.user!.id },
+          {
+            attestationId: req.params.id,
+            repository: `${attestation.repository.owner}/${attestation.repository.name}`,
+            workflowPath: attestation.workflowPath,
+          },
+          req.ip
+        );
+
         res.json(revoked);
       } catch (err) {
-        console.error("[action-gate] DELETE /attestations/:id error:", err);
+        logger.error({ err }, "DELETE /attestations/:id error");
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -559,7 +624,7 @@ export function createApiRouter(): Router {
 
       res.json({ repositories, total, page, perPage });
     } catch (err) {
-      console.error("[action-gate] GET /repositories error:", err);
+      logger.error({ err }, "GET /repositories error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -567,6 +632,10 @@ export function createApiRouter(): Router {
   /** GET /api/v1/repositories/:owner/:repo */
   router.get("/repositories/:owner/:repo", async (req: Request, res: Response) => {
     try {
+      if (!GITHUB_NAME_RE.test(req.params.owner) || !GITHUB_NAME_RE.test(req.params.repo)) {
+        res.status(400).json({ error: "Invalid owner or repository name" });
+        return;
+      }
       const repo = await prisma.repository.findUnique({
         where: {
           owner_name: { owner: req.params.owner, name: req.params.repo },
@@ -587,7 +656,7 @@ export function createApiRouter(): Router {
       }
       res.json(repo);
     } catch (err) {
-      console.error("[action-gate] GET /repositories/:owner/:repo error:", err);
+      logger.error({ err }, "GET /repositories/:owner/:repo error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -603,6 +672,10 @@ export function createApiRouter(): Router {
     async (req: AuthRequest, res: Response) => {
       try {
         const { owner, repo } = req.params;
+        if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo)) {
+          res.status(400).json({ error: "Invalid owner or repository name" });
+          return;
+        }
         const { mode, expiry_days } = req.body as Record<string, unknown>;
 
         // Verify requester holds admin permission on the repo.
@@ -633,9 +706,17 @@ export function createApiRouter(): Router {
         }
 
         const updated = await updateRepositoryConfig(owner, repo, updates);
+
+        audit(
+          "repository.config.update",
+          { login: req.user!.login, id: req.user!.id },
+          { repository: `${owner}/${repo}`, changes: updates },
+          req.ip
+        );
+
         res.json(updated);
       } catch (err) {
-        console.error("[action-gate] PUT /repositories/:owner/:repo/config error:", err);
+        logger.error({ err }, "PUT /repositories/:owner/:repo/config error");
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -673,7 +754,7 @@ export function createApiRouter(): Router {
         expiringSoon,
       });
     } catch (err) {
-      console.error("[action-gate] GET /summary error:", err);
+      logger.error({ err }, "GET /summary error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -738,7 +819,7 @@ export function createApiRouter(): Router {
 
       res.json({ runs: enriched });
     } catch (err) {
-      console.error("[action-gate] GET /runs/recent error:", err);
+      logger.error({ err }, "GET /runs/recent error");
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -856,7 +937,7 @@ export function createAuthRouter(): Router {
       const base = (process.env.DASHBOARD_URL ?? "/dashboard").replace(/\/$/, "");
       res.redirect(`${base}#token=${encodeURIComponent(data.access_token)}`);
     } catch (err) {
-      console.error("[action-gate] GET /auth/github/callback error:", err);
+      logger.error({ err }, "GET /auth/github/callback error");
       res.type("text").status(500).send("Failed to exchange OAuth code for access token.");
     }
   });

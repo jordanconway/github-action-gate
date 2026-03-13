@@ -48,6 +48,9 @@ jest.mock("../../db/client", () => ({
     workflowRun: {
       findMany: jest.fn(),
     },
+    auditLog: {
+      create: jest.fn().mockResolvedValue({}),
+    },
   },
 }));
 
@@ -66,6 +69,11 @@ const mockGetRepository = getRepository as jest.MockedFunction<typeof getReposit
 const mockCreateAttestation = createAttestation as jest.MockedFunction<typeof createAttestation>;
 const _mockRevokeAttestation = revokeAttestation as jest.MockedFunction<typeof revokeAttestation>;
 const mockPrisma = prisma as jest.Mocked<typeof prisma>;
+
+// Restore the auditLog mock after resetMocks clears it between tests.
+beforeEach(() => {
+  (mockPrisma.auditLog.create as jest.Mock).mockResolvedValue({});
+});
 
 // Make authenticateUser a pass-through by default (attaches a test user)
 const mockAuth = authenticateUser as jest.MockedFunction<typeof authenticateUser>;
@@ -97,9 +105,13 @@ function makeRepo(overrides: Record<string, unknown> = {}) {
   };
 }
 
+// Valid CUID format for route-param validation (^c[a-z0-9]{24}$).
+const ATT_ID = "cm3abc1234567890abcdef123";
+const ATT_ID_MISSING = "cm3zzzzzzzzzzzzzzzzzzzzzz";
+
 function makeAttestation(overrides: Record<string, unknown> = {}) {
   return {
-    id: "att-1",
+    id: ATT_ID,
     repositoryId: "repo-1",
     workflowPath: ".github/workflows/ci.yml",
     jobName: null,
@@ -184,17 +196,17 @@ describe("GET /api/v1/attestations/:id", () => {
     (mockPrisma.attestation.findUnique as jest.Mock).mockResolvedValue(att);
 
     const app = buildApp();
-    const res = await request(app).get("/api/v1/attestations/att-1");
+    const res = await request(app).get(`/api/v1/attestations/${ATT_ID}`);
 
     expect(res.status).toBe(200);
-    expect(res.body.id).toBe("att-1");
+    expect(res.body.id).toBe(ATT_ID);
   });
 
   it("returns 404 when attestation is not found", async () => {
     (mockPrisma.attestation.findUnique as jest.Mock).mockResolvedValue(null);
 
     const app = buildApp();
-    const res = await request(app).get("/api/v1/attestations/missing");
+    const res = await request(app).get(`/api/v1/attestations/${ATT_ID_MISSING}`);
 
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/not found/i);
@@ -302,7 +314,7 @@ describe("POST /api/v1/attestations", () => {
 
     expect(res.status).toBe(409);
     expect(res.body.error).toMatch(/already exists/i);
-    expect(res.body.error).toContain("att-1");
+    expect(res.body.error).toContain(ATT_ID);
   });
 
   it("returns 201 and creates the attestation on success", async () => {
@@ -321,7 +333,7 @@ describe("POST /api/v1/attestations", () => {
       });
 
     expect(res.status).toBe(201);
-    expect(res.body.id).toBe("att-1");
+    expect(res.body.id).toBe(ATT_ID);
     expect(mockCreateAttestation).toHaveBeenCalledWith(
       expect.objectContaining({
         workflowPath: ".github/workflows/ci.yml",

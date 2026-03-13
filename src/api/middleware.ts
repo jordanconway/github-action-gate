@@ -15,13 +15,13 @@ export interface AuthRequest extends Request {
 }
 
 // Simple in-memory token → user cache to avoid hitting the GitHub API on
-// every authenticated request.  Entries expire after 5 minutes.
+// every authenticated request.  Entries expire after 2 minutes.
 interface CacheEntry {
   user: GitHubUser;
   expiresAt: number;
 }
 const tokenCache = new Map<string, CacheEntry>();
-const CACHE_TTL_MS = 5 * 60 * 1_000;
+const CACHE_TTL_MS = 2 * 60 * 1_000;
 
 /**
  * Verify the GitHub Bearer token in the Authorization header.

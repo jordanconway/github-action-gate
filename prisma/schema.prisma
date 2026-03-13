@@ -120,3 +120,25 @@ model WorkflowRun {
   @@index([repositoryId])
   @@index([createdAt])
 }
+
+/// Immutable audit log for security-sensitive operations.
+model AuditLog {
+  id        String   @id @default(cuid())
+  /// Action that was performed, e.g. "attestation.create", "attestation.revoke",
+  /// "repository.config.update".
+  action    String
+  /// GitHub login of the user who performed the action.
+  actor     String
+  /// GitHub numeric user ID of the actor.
+  actorId   Int
+  /// JSON-encoded details of the change (new values, affected resource IDs, etc.)
+  detail    String?
+  /// IP address of the requester (for forensic analysis).
+  ipAddress String?
+
+  createdAt DateTime @default(now())
+
+  @@index([action])
+  @@index([actor])
+  @@index([createdAt])
+}
