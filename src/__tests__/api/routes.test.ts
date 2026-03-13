@@ -433,3 +433,161 @@ describe("GET /api/v1/runs/recent", () => {
     expect(res.body.runs).toEqual([]);
   });
 });
+
+// ── POST /attestations/batch ───────────────────────────────────────────────────
+
+describe("POST /attestations/batch", () => {
+  const VALID_ITEM = {
+    repository: "acme/app",
+    workflow_path: ".github/workflows/ci.yml",
+  };
+
+  beforeEach(() => {
+    mockAuth.mockImplementation(async (req: any, _res: any, next: any) => {
+      req.user = { login: "alice", id: 1 };
+      req.token = "tok";
+      next();
+    });
+    mockGetRepository.mockResolvedValue(makeRepo() as any);
+    mockCreateAttestation.mockResolvedValue(makeAttestation() as any);
+    (mockPrisma.attestation.findFirst as jest.Mock).mockResolvedValue(null);
+  });
+
+  it("returns 400 when attestations array is missing", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/non-empty array/);
+  });
+
+  it("returns 400 when attestations array is empty", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({ attestations: [] });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/non-empty array/);
+  });
+
+  it("returns 400 when batch size exceeds 50", async () => {
+    const items = Array.from({ length: 51 }, () => ({ ...VALID_ITEM }));
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({ attestations: items });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/50/);
+  });
+
+  it("returns 201 and creates all attestations when all items are valid", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({ attestations: [VALID_ITEM] });
+    expect(res.status).toBe(201);
+    expect(res.body.summary).toEqual({ created: 1, skipped: 0, errors: 0 });
+    expect(res.body.results[0].status).toBe("created");
+  });
+
+  it("returns 207 with skipped when active attestation already exists", async () => {
+    (mockPrisma.attestation.findFirst as jest.Mock).mockResolvedValue(
+      makeAttestation()
+    );
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({ attestations: [VALID_ITEM] });
+    expect(res.status).toBe(207);
+    expect(res.body.summary.skipped).toBe(1);
+    expect(res.body.results[0].status).toBe("skipped");
+  });
+
+  it("returns 207 with error when repository is not found", async () => {
+    mockGetRepository.mockResolvedValue(null as any);
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({ attestations: [VALID_ITEM] });
+    expect(res.status).toBe(207);
+    expect(res.body.summary.errors).toBe(1);
+    expect(res.body.results[0].status).toBe("error");
+    expect(res.body.results[0].reason).toMatch(/not found/i);
+  });
+
+  it("returns per-item error for invalid workflow_path", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({
+        attestations: [{ repository: "acme/app", workflow_path: "bad-path.yml" }],
+      });
+    expect(res.status).toBe(207);
+    expect(res.body.results[0].status).toBe("error");
+    expect(res.body.results[0].reason).toMatch(/workflow_path/);
+  });
+
+  it("returns per-item error for invalid repository format", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({
+        attestations: [
+          { repository: "no-slash", workflow_path: ".github/workflows/ci.yml" },
+        ],
+      });
+    expect(res.status).toBe(207);
+    expect(res.body.results[0].status).toBe("error");
+    expect(res.body.results[0].reason).toMatch(/owner\/repo/);
+  });
+
+  it("returns mixed results for a batch with valid and invalid items", async () => {
+    // First call's repo returns valid, second returns null (not installed)
+    mockGetRepository
+      .mockResolvedValueOnce(makeRepo() as any)
+      .mockResolvedValueOnce(null as any);
+
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({
+        attestations: [
+          VALID_ITEM,
+          { repository: "acme/missing", workflow_path: ".github/workflows/ci.yml" },
+        ],
+      });
+    expect(res.status).toBe(207);
+    expect(res.body.summary.created).toBe(1);
+    expect(res.body.summary.errors).toBe(1);
+    // Results are sorted by original index
+    expect(res.body.results[0].index).toBe(0);
+    expect(res.body.results[1].index).toBe(1);
+  });
+
+  it("returns per-item error when notes exceed 1000 characters", async () => {
+    const app = buildApp();
+    const res = await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({
+        attestations: [{ ...VALID_ITEM, notes: "x".repeat(1001) }],
+      });
+    expect(res.status).toBe(207);
+    expect(res.body.results[0].status).toBe("error");
+    expect(res.body.results[0].reason).toMatch(/notes/);
+  });
+
+  it("deduplicates repository DB lookups for identical repos", async () => {
+    const app = buildApp();
+    await request(app)
+      .post("/api/v1/attestations/batch")
+      .send({
+        attestations: [
+          VALID_ITEM,
+          { repository: "acme/app", workflow_path: ".github/workflows/deploy.yml" },
+        ],
+      });
+    // getRepository should only be called once for the same owner/name pair
+    expect(mockGetRepository).toHaveBeenCalledTimes(1);
+  });
+});

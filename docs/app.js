@@ -25,6 +25,9 @@ const state = {
   },
 };
 
+// Keys of runs selected for batch vouching: "${owner}/${repo}::${workflowPath}"
+const selectedRunKeys = new Set();
+
 // ── DOM references ────────────────────────────────────────────────────────────
 
 const $ = (id) => document.getElementById(id);
@@ -630,7 +633,15 @@ function renderRunRow(run) {
       ? `<span class="badge badge-success" title="Active attestation exists">✓ Vouched</span>`
       : "";
 
+  const runKey = repoFull ? `${escapeHtml(repoFull)}::${escapeHtml(run.workflowPath)}` : "";
+  const checkCell = repoFull && !run.isAttested
+    ? `<td><input type="checkbox" class="run-select" data-key="${runKey}"
+         data-repo="${escapeHtml(repoFull)}" data-workflow="${escapeHtml(run.workflowPath)}"
+         title="Select for batch vouch"${selectedRunKeys.has(runKey) ? " checked" : ""}></td>`
+    : "<td></td>";
+
   return `<tr>
+    ${checkCell}
     <td>${repo}</td>
     <td>${workflowLink}</td>
     <td>${branch}</td>
@@ -656,9 +667,39 @@ async function loadRecentRuns() {
       : '';
 
     if (unvouched.length === 0) {
-      $('runs-body').innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--color-muted);padding:24px;">All recent workflow runs have active attestations — nothing to vouch for.</td></tr>`;
+      $('runs-body').innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--color-muted);padding:24px;">All recent workflow runs have active attestations — nothing to vouch for.</td></tr>`;
+      const selectAll = $("runs-select-all");
+      if (selectAll) selectAll.checked = false;
     } else {
       $('runs-body').innerHTML = unvouched.map(renderRunRow).join('');
+      // Wire up per-row checkboxes
+      document.querySelectorAll(".run-select").forEach((cb) => {
+        cb.addEventListener("change", (e) => {
+          const key = e.target.dataset.key;
+          if (e.target.checked) {
+            selectedRunKeys.add(key);
+          } else {
+            selectedRunKeys.delete(key);
+            const selectAll = $("runs-select-all");
+            if (selectAll) selectAll.checked = false;
+          }
+          updateVouchSelectedBtn();
+        });
+      });
+      // Wire up select-all
+      const selectAll = $("runs-select-all");
+      if (selectAll) {
+        selectAll.checked = false;
+        selectAll.addEventListener("change", (e) => {
+          document.querySelectorAll(".run-select").forEach((cb) => {
+            cb.checked = e.target.checked;
+            const key = cb.dataset.key;
+            if (e.target.checked) selectedRunKeys.add(key);
+            else selectedRunKeys.delete(key);
+          });
+          updateVouchSelectedBtn();
+        });
+      }
     }
 
     $("runs-loading").hidden = true;
@@ -669,6 +710,74 @@ async function loadRecentRuns() {
     $("runs-error").hidden = false;
   }
 }
+
+// ── Batch vouch helpers ───────────────────────────────────────────────────────
+
+function updateVouchSelectedBtn() {
+  const btn = $("btn-vouch-selected");
+  if (!btn) return;
+  const count = selectedRunKeys.size;
+  btn.hidden = count === 0;
+  btn.textContent = `Vouch selected (${count})`;
+}
+
+async function vouchSelected() {
+  const token = getAuthToken();
+  if (!token) {
+    alert("Please log in with GitHub before creating attestations.");
+    return;
+  }
+  if (selectedRunKeys.size === 0) return;
+
+  // Collect the checked row data attributes for the API call
+  const items = [];
+  document.querySelectorAll(".run-select:checked").forEach((cb) => {
+    items.push({ repository: cb.dataset.repo, workflow_path: cb.dataset.workflow });
+  });
+
+  const btn = $("btn-vouch-selected");
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Vouching…";
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/attestations/batch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ attestations: items }),
+    });
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok && res.status !== 207) {
+      alert(`Batch vouch failed: ${data.error ?? res.statusText}`);
+      return;
+    }
+
+    const { summary } = data;
+    selectedRunKeys.clear();
+    updateVouchSelectedBtn();
+    const selectAll = $("runs-select-all");
+    if (selectAll) selectAll.checked = false;
+
+    // Refresh all relevant sections
+    await Promise.all([loadRecentRuns(), loadAttestations(), loadSummary()]);
+
+    if (summary) {
+      const parts = [];
+      if (summary.created) parts.push(`${summary.created} created`);
+      if (summary.skipped) parts.push(`${summary.skipped} skipped (already attested)`);
+      if (summary.errors)  parts.push(`${summary.errors} failed`);
+      if (parts.length) alert(`Batch vouch complete: ${parts.join(", ")}.`);
+    }
+  } catch (err) {
+    alert(`Batch vouch error: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
+  }
+}
+
+$("btn-vouch-selected").addEventListener("click", vouchSelected);
 
 // Vouch buttons inside the runs table — pre-fill and open the modal.
 document.addEventListener("click", (e) => {

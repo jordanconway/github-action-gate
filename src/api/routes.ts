@@ -228,6 +228,265 @@ export function createApiRouter(): Router {
   );
 
   /**
+   * POST /api/v1/attestations/batch
+   *
+   * Vouch for up to 50 workflow/job targets in a single request.
+   *
+   * Body:
+   *   { "attestations": [ { repository, workflow_path, job_name?, tier?,
+   *       org_github_login?, org_affiliation?, notes?, expiry_days? }, ... ] }
+   *
+   * Returns 201 when all items were created, 207 Multi-Status for mixed results.
+   */
+  router.post(
+    "/attestations/batch",
+    authenticateUser as unknown as (
+      req: Request,
+      res: Response,
+      next: () => void
+    ) => void,
+    async (req: AuthRequest, res: Response) => {
+      try {
+        const body = req.body as Record<string, unknown>;
+        const items = body.attestations;
+
+        if (!Array.isArray(items) || items.length === 0) {
+          res.status(400).json({ error: "attestations must be a non-empty array" });
+          return;
+        }
+        const MAX_BATCH = 50;
+        if (items.length > MAX_BATCH) {
+          res.status(400).json({ error: `batch size must not exceed ${MAX_BATCH}` });
+          return;
+        }
+
+        type BatchResult =
+          | { index: number; status: "created"; attestation: unknown }
+          | { index: number; status: "skipped"; reason: string }
+          | { index: number; status: "error"; reason: string };
+
+        const results: BatchResult[] = [];
+        const validItems: Array<{
+          index: number;
+          repository: string;
+          workflow_path: string;
+          jobArg: string | null;
+          repoOwner: string;
+          repoName: string;
+          attestationTier: AttestationTier;
+          org_github_login: string | null;
+          org_affiliation: string | null;
+          notes: string | null;
+          expiry_days: number | undefined;
+        }> = [];
+
+        // ── Per-item shape validation ───────────────────────────────────────
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i] as Record<string, unknown>;
+          const {
+            repository,
+            workflow_path,
+            job_name,
+            tier,
+            org_github_login,
+            org_affiliation,
+            notes,
+            expiry_days,
+          } = item;
+
+          if (typeof repository !== "string" || typeof workflow_path !== "string") {
+            results.push({
+              index: i,
+              status: "error",
+              reason: "repository and workflow_path are required strings",
+            });
+            continue;
+          }
+          if (!/^\.github\/workflows\/.+\.ya?ml$/.test(workflow_path)) {
+            results.push({
+              index: i,
+              status: "error",
+              reason: "workflow_path must match .github/workflows/*.yml",
+            });
+            continue;
+          }
+          const [repoOwner, repoName] = repository.split("/");
+          if (!repoOwner || !repoName) {
+            results.push({
+              index: i,
+              status: "error",
+              reason: 'repository must be in "owner/repo" format',
+            });
+            continue;
+          }
+          if (typeof notes === "string" && notes.length > 1_000) {
+            results.push({
+              index: i,
+              status: "error",
+              reason: "notes must not exceed 1,000 characters",
+            });
+            continue;
+          }
+          if (typeof org_affiliation === "string" && org_affiliation.length > 200) {
+            results.push({
+              index: i,
+              status: "error",
+              reason: "org_affiliation must not exceed 200 characters",
+            });
+            continue;
+          }
+          const attestationTier =
+            tier === "organization"
+              ? AttestationTier.ORGANIZATION
+              : AttestationTier.USER;
+          if (
+            attestationTier === AttestationTier.ORGANIZATION &&
+            typeof org_github_login !== "string"
+          ) {
+            results.push({
+              index: i,
+              status: "error",
+              reason: "org_github_login is required for organization-tier attestations",
+            });
+            continue;
+          }
+
+          validItems.push({
+            index: i,
+            repository,
+            workflow_path,
+            jobArg: typeof job_name === "string" ? job_name : null,
+            repoOwner,
+            repoName,
+            attestationTier,
+            org_github_login: typeof org_github_login === "string" ? org_github_login : null,
+            org_affiliation: typeof org_affiliation === "string" ? org_affiliation : null,
+            notes: typeof notes === "string" ? notes : null,
+            expiry_days:
+              typeof expiry_days === "number" && expiry_days > 0
+                ? expiry_days
+                : undefined,
+          });
+        }
+
+        // ── Deduplicated org membership checks ─────────────────────────────
+        const orgLoginSet = new Set(
+          validItems
+            .filter(
+              (it) =>
+                it.attestationTier === AttestationTier.ORGANIZATION &&
+                it.org_github_login
+            )
+            .map((it) => it.org_github_login as string)
+        );
+        const orgMembershipOk = new Map<string, boolean>();
+        if (orgLoginSet.size > 0) {
+          const userOctokit = new Octokit({ auth: req.token });
+          await Promise.all(
+            [...orgLoginSet].map(async (org) => {
+              try {
+                await userOctokit.orgs.checkMembershipForUser({
+                  org,
+                  username: req.user!.login,
+                });
+                orgMembershipOk.set(org, true);
+              } catch {
+                orgMembershipOk.set(org, false);
+              }
+            })
+          );
+        }
+
+        // ── Deduplicated repository lookups ────────────────────────────────
+        const repoKeySet = new Set(
+          validItems.map((it) => `${it.repoOwner}/${it.repoName}`)
+        );
+        const repoCache = new Map<
+          string,
+          { id: string; expiryDays: number } | null
+        >();
+        await Promise.all(
+          [...repoKeySet].map(async (key) => {
+            const [o, n] = key.split("/");
+            repoCache.set(key, await getRepository(o, n));
+          })
+        );
+
+        // ── Per-item create ─────────────────────────────────────────────────
+        for (const it of validItems) {
+          if (
+            it.attestationTier === AttestationTier.ORGANIZATION &&
+            it.org_github_login
+          ) {
+            if (!orgMembershipOk.get(it.org_github_login)) {
+              results.push({
+                index: it.index,
+                status: "error",
+                reason: `You must be a member of @${it.org_github_login} to create an organization-tier attestation`,
+              });
+              continue;
+            }
+          }
+
+          const repoRecord = repoCache.get(`${it.repoOwner}/${it.repoName}`);
+          if (!repoRecord) {
+            results.push({
+              index: it.index,
+              status: "error",
+              reason: "Repository not found. Install the Action Gate GitHub App on this repository first.",
+            });
+            continue;
+          }
+
+          const existing = await prisma.attestation.findFirst({
+            where: {
+              repositoryId: repoRecord.id,
+              workflowPath: it.workflow_path,
+              jobName: it.jobArg,
+              revokedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          });
+          if (existing) {
+            results.push({
+              index: it.index,
+              status: "skipped",
+              reason: `An active attestation for this ${it.jobArg ? "job" : "workflow"} already exists (id: ${existing.id})`,
+            });
+            continue;
+          }
+
+          const attestation = await createAttestation({
+            repositoryId: repoRecord.id,
+            workflowPath: it.workflow_path,
+            jobName: it.jobArg,
+            voucherGithubLogin: req.user!.login,
+            voucherGithubId: req.user!.id,
+            voucherOrgAffiliation: it.org_affiliation,
+            tier: it.attestationTier,
+            orgGithubLogin: it.org_github_login,
+            notes: it.notes,
+            expiryDays: it.expiry_days ?? repoRecord.expiryDays,
+          });
+          results.push({ index: it.index, status: "created", attestation });
+        }
+
+        const created = results.filter((r) => r.status === "created").length;
+        const skipped = results.filter((r) => r.status === "skipped").length;
+        const errors  = results.filter((r) => r.status === "error").length;
+        results.sort((a, b) => a.index - b.index);
+
+        const httpStatus =
+          created > 0 && skipped === 0 && errors === 0 ? 201 : 207;
+        res.status(httpStatus).json({ results, summary: { created, skipped, errors } });
+      } catch (err) {
+        console.error("[action-gate] POST /attestations/batch error:", err);
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  );
+
+  /**
    * DELETE /api/v1/attestations/:id
    * Revokes an attestation.  Must be the original voucher or a repo admin.
    */

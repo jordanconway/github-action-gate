@@ -71,6 +71,7 @@
         <div class="table-header">
           <h2 class="table-title">Recent Workflow Runs</h2>
           <span class="result-count" id="runs-count"></span>
+          <button id="btn-vouch-selected" class="btn btn-primary btn-sm" hidden>Vouch selected (0)</button>
           <button id="btn-refresh-runs" class="btn btn-secondary btn-sm" title="Refresh">
             ↺ Refresh
           </button>
@@ -84,6 +85,7 @@
           <table id="runs-table">
             <thead>
               <tr>
+                <th><input type="checkbox" id="runs-select-all" title="Select all unvouched"></th>
                 <th>Repository</th>
                 <th>Workflow</th>
                 <th>Branch</th>
