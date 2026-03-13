@@ -18,6 +18,12 @@ export = function actionGate(bot: Probot, { getRouter }: AppOptions) {
 
   // CORS — restrict in production to your GitHub Pages origin.
   const allowedOrigins = process.env.CORS_ORIGINS ?? "*";
+  if (allowedOrigins === "*" && process.env.NODE_ENV === "production") {
+    bot.log.warn(
+      "CORS is set to allow all origins (*). Set the CORS_ORIGINS environment " +
+        "variable to your dashboard origin(s) to restrict cross-origin access."
+    );
+  }
   router.use(
     cors(
       allowedOrigins === "*"
@@ -28,6 +34,14 @@ export = function actionGate(bot: Probot, { getRouter }: AppOptions) {
           }
     )
   );
+
+  // Security headers on every response from this router.
+  router.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    next();
+  });
 
   router.use(express.json({ limit: "256kb" }));
   router.use("/api/v1", createApiRouter());

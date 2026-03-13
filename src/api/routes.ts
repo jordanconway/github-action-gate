@@ -39,11 +39,12 @@ export function createApiRouter(): Router {
         voucherGithubLogin: q.voucher,
         orgGithubLogin: q.org,
         activeOnly: q.active_only === "true",
-        page: q.page ? parseInt(q.page, 10) : 1,
-        perPage: q.per_page ? parseInt(q.per_page, 10) : 30,
+        page: parseInt(q.page, 10) || 1,
+        perPage: parseInt(q.per_page, 10) || 30,
       });
       res.json(result);
-    } catch {
+    } catch (err) {
+      console.error("[action-gate] GET /attestations error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -60,7 +61,8 @@ export function createApiRouter(): Router {
         return;
       }
       res.json(attestation);
-    } catch {
+    } catch (err) {
+      console.error("[action-gate] GET /attestations/:id error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -122,6 +124,16 @@ export function createApiRouter(): Router {
           res
             .status(400)
             .json({ error: 'repository must be in "owner/repo" format' });
+          return;
+        }
+
+        // Enforce length limits on free-text fields to prevent abuse.
+        if (typeof notes === "string" && notes.length > 1_000) {
+          res.status(400).json({ error: "notes must not exceed 1,000 characters" });
+          return;
+        }
+        if (typeof org_affiliation === "string" && org_affiliation.length > 200) {
+          res.status(400).json({ error: "org_affiliation must not exceed 200 characters" });
           return;
         }
 
@@ -208,7 +220,8 @@ export function createApiRouter(): Router {
         });
 
         res.status(201).json(attestation);
-      } catch {
+      } catch (err) {
+        console.error("[action-gate] POST /attestations error:", err);
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -268,7 +281,8 @@ export function createApiRouter(): Router {
           req.user!.login
         );
         res.json(revoked);
-      } catch {
+      } catch (err) {
+        console.error("[action-gate] DELETE /attestations/:id error:", err);
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -280,8 +294,8 @@ export function createApiRouter(): Router {
   router.get("/repositories", async (req: Request, res: Response) => {
     try {
       const q = req.query as Record<string, string>;
-      const page = Math.max(1, parseInt(q.page ?? "1", 10));
-      const perPage = Math.min(parseInt(q.per_page ?? "30", 10), 100);
+      const page = Math.max(1, parseInt(q.page ?? "1", 10) || 1);
+      const perPage = Math.min(parseInt(q.per_page ?? "30", 10) || 30, 100);
       const skip = (page - 1) * perPage;
 
       const [repositories, total] = await Promise.all([
@@ -303,7 +317,8 @@ export function createApiRouter(): Router {
       ]);
 
       res.json({ repositories, total, page, perPage });
-    } catch {
+    } catch (err) {
+      console.error("[action-gate] GET /repositories error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -332,7 +347,8 @@ export function createApiRouter(): Router {
           return;
         }
         res.json(repo);
-      } catch {
+      } catch (err) {
+        console.error("[action-gate] GET /repositories/:owner/:repo error:", err);
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -387,7 +403,8 @@ export function createApiRouter(): Router {
 
         const updated = await updateRepositoryConfig(owner, repo, updates);
         res.json(updated);
-      } catch {
+      } catch (err) {
+        console.error("[action-gate] PUT /repositories/:owner/:repo/config error:", err);
         res.status(500).json({ error: "Internal server error" });
       }
     }
@@ -427,7 +444,8 @@ export function createApiRouter(): Router {
         activeAttestations,
         expiringSoon,
       });
-    } catch {
+    } catch (err) {
+      console.error("[action-gate] GET /summary error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -496,7 +514,8 @@ export function createApiRouter(): Router {
       }));
 
       res.json({ runs: enriched });
-    } catch {
+    } catch (err) {
+      console.error("[action-gate] GET /runs/recent error:", err);
       res.status(500).json({ error: "Internal server error" });
     }
   });
@@ -628,7 +647,8 @@ export function createAuthRouter(): Router {
         ""
       );
       res.redirect(`${base}#token=${encodeURIComponent(data.access_token)}`);
-    } catch {
+    } catch (err) {
+      console.error("[action-gate] GET /auth/github/callback error:", err);
       res
         .type("text")
         .status(500)

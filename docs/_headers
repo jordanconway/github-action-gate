@@ -1,0 +1,9 @@
+/*
+  X-Content-Type-Options: nosniff
+  X-Frame-Options: DENY
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: geolocation=(), camera=(), microphone=()
+  # script-src includes 'unsafe-inline' for the inline config block in index.html
+  # (window.ACTION_GATE_API_URL = "..."). connect-src allows the configured API
+  # worker domain (https:) plus GitHub API for auth/org lookups.
+  Content-Security-Policy: default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' https://avatars.githubusercontent.com data:; connect-src 'self' https:; font-src 'self'; frame-ancestors 'none'; form-action 'self'

@@ -165,6 +165,16 @@ function buildSummary(
 // ─── Check run output builder ─────────────────────────────────────────────────
 
 /**
+ * Escape characters that could break a GitHub Markdown table cell.
+ * Prevents injection via user-controlled free-text fields (e.g. org affiliation,
+ * job names) which are embedded in check run output tables.
+ */
+function escapeMdCell(s: string | null | undefined): string {
+  if (s == null) return "—";
+  return String(s).replace(/[|`\\]/g, (ch) => `\\${ch}`).replace(/[\r\n]/g, " ");
+}
+
+/**
  * Convert a GateSummary into parameters suitable for a GitHub check run output.
  */
 export function buildCheckOutput(summary: GateSummary): CheckOutput {
@@ -197,9 +207,9 @@ export function buildCheckOutput(summary: GateSummary): CheckOutput {
     lines.push("| Workflow | Job | Status |");
     lines.push("| --- | --- | --- |");
     for (const c of issues) {
-      const job = c.jobName ?? "_entire workflow_";
+      const job = c.jobName != null ? escapeMdCell(c.jobName) : "_entire workflow_";
       const badge = c.status === "expired" ? "🔄 Expired" : "❌ Unattested";
-      lines.push(`| \`${c.workflowPath}\` | ${job} | ${badge} |`);
+      lines.push(`| \`${escapeMdCell(c.workflowPath)}\` | ${job} | ${badge} |`);
     }
     lines.push("");
     if (dashboardUrl) {
@@ -220,16 +230,16 @@ export function buildCheckOutput(summary: GateSummary): CheckOutput {
     lines.push("| Workflow | Job | Voucher | Affiliation | Expires |");
     lines.push("| --- | --- | --- | --- | --- |");
     for (const c of attested) {
-      const job = c.jobName ?? "_entire workflow_";
+      const job = c.jobName != null ? escapeMdCell(c.jobName) : "_entire workflow_";
       const voucher = c.orgGithubLogin
-        ? `@${c.orgGithubLogin} (org)`
-        : `@${c.voucherGithubLogin ?? "?"}`;
-      const affil = c.voucherOrgAffiliation ?? "—";
+        ? `@${escapeMdCell(c.orgGithubLogin)} (org)`
+        : `@${escapeMdCell(c.voucherGithubLogin) || "?"}`;
+      const affil = escapeMdCell(c.voucherOrgAffiliation);
       const exp = c.expiresAt
         ? c.expiresAt.toISOString().split("T")[0]
         : "—";
       lines.push(
-        `| \`${c.workflowPath}\` | ${job} | ${voucher} | ${affil} | ${exp} |`
+        `| \`${escapeMdCell(c.workflowPath)}\` | ${job} | ${voucher} | ${affil} | ${exp} |`
       );
     }
     lines.push("");

@@ -604,8 +604,12 @@ function renderRunRow(run) {
   const repo = run.repository
     ? `<a href="https://github.com/${escapeHtml(run.repository.owner)}/${escapeHtml(run.repository.name)}" target="_blank" rel="noopener" class="mono">${escapeHtml(run.repository.owner)}/${escapeHtml(run.repository.name)}</a>`
     : "—";
-  const workflowLink = run.htmlUrl
-    ? `<a href="${escapeHtml(run.htmlUrl)}" target="_blank" rel="noopener" class="mono">${escapeHtml(run.workflowPath)}</a>`
+  // Only allow safe HTTPS URLs as the workflow run link to guard against
+  // javascript: URI injection — htmlUrl comes from the database via GitHub API.
+  const safeHtmlUrl =
+    run.htmlUrl && /^https:\/\//.test(run.htmlUrl) ? run.htmlUrl : null;
+  const workflowLink = safeHtmlUrl
+    ? `<a href="${escapeHtml(safeHtmlUrl)}" target="_blank" rel="noopener" class="mono">${escapeHtml(run.workflowPath)}</a>`
     : `<span class="mono">${escapeHtml(run.workflowPath)}</span>`;
   const branch = run.headBranch
     ? `<span class="mono">${escapeHtml(run.headBranch)}</span>`
