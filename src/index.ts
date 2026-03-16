@@ -48,6 +48,7 @@ export default function actionGate(bot: Probot, { getRouter }: AppOptions) {
         "img-src 'self' https://avatars.githubusercontent.com data:; connect-src 'self' https:; " +
         "font-src 'self'; frame-ancestors 'none'; form-action 'self'"
     );
+    res.setHeader("Permissions-Policy", "geolocation=(), camera=(), microphone=()");
     next();
   });
 

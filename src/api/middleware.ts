@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { Request, Response, NextFunction } from "express";
 import { RetryOctokit } from "./octokit.js";
 
@@ -16,12 +17,19 @@ export interface AuthRequest extends Request {
 
 // Simple in-memory token → user cache to avoid hitting the GitHub API on
 // every authenticated request.  Entries expire after 2 minutes.
+// Keys are SHA-256 hashes of the raw token so plaintext tokens are never
+// held in long-lived memory.
 interface CacheEntry {
   user: GitHubUser;
   expiresAt: number;
 }
 const tokenCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 2 * 60 * 1_000;
+
+/** Hash a token with SHA-256 for use as a cache key. */
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
 
 /**
  * Verify the GitHub Bearer token in the Authorization header.
@@ -39,9 +47,10 @@ export async function authenticateUser(
   }
 
   const token = authHeader.slice(7);
+  const tokenKey = hashToken(token);
 
   // Serve from cache first.
-  const cached = tokenCache.get(token);
+  const cached = tokenCache.get(tokenKey);
   if (cached && cached.expiresAt > Date.now()) {
     req.user = cached.user;
     req.token = token;
@@ -61,7 +70,7 @@ export async function authenticateUser(
       email: data.email ?? null,
     };
 
-    tokenCache.set(token, { user, expiresAt: Date.now() + CACHE_TTL_MS });
+    tokenCache.set(tokenKey, { user, expiresAt: Date.now() + CACHE_TTL_MS });
 
     // Prune stale entries once the cache gets large.
     if (tokenCache.size > 500) {

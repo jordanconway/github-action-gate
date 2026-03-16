@@ -17,6 +17,8 @@ import { logger } from "../logger.js";
 const GITHUB_NAME_RE = /^[a-zA-Z0-9._-]{1,100}$/;
 // CUID format used by Prisma @default(cuid()) — 25-char lowercase alphanumeric.
 const CUID_RE = /^c[a-z0-9]{24}$/;
+// Maximum expiry for attestations — 2 years.
+const MAX_EXPIRY_DAYS = 730;
 
 /** Express 5 params are `string | string[]` — extract the scalar string. */
 function str(v: string | string[] | undefined): string {
@@ -153,6 +155,10 @@ export function createApiRouter(): Router {
           res.status(400).json({ error: 'repository must be in "owner/repo" format' });
           return;
         }
+        if (!GITHUB_NAME_RE.test(repoOwner) || !GITHUB_NAME_RE.test(repoName)) {
+          res.status(400).json({ error: "Invalid owner or repository name" });
+          return;
+        }
 
         // Enforce length limits on free-text fields to prevent abuse.
         if (typeof notes === "string" && notes.length > 1_000) {
@@ -206,7 +212,9 @@ export function createApiRouter(): Router {
         }
 
         const expiryDays =
-          typeof expiry_days === "number" && expiry_days > 0 ? expiry_days : repoRecord.expiryDays;
+          typeof expiry_days === "number" && expiry_days > 0
+            ? Math.min(expiry_days, MAX_EXPIRY_DAYS)
+            : repoRecord.expiryDays;
 
         // Reject if an active attestation already exists for this exact target.
         const jobArg = typeof job_name === "string" ? job_name : null;
@@ -351,6 +359,14 @@ export function createApiRouter(): Router {
             });
             continue;
           }
+          if (!GITHUB_NAME_RE.test(repoOwner) || !GITHUB_NAME_RE.test(repoName)) {
+            results.push({
+              index: i,
+              status: "error",
+              reason: "Invalid owner or repository name",
+            });
+            continue;
+          }
           if (typeof notes === "string" && notes.length > 1_000) {
             results.push({
               index: i,
@@ -393,7 +409,9 @@ export function createApiRouter(): Router {
             org_affiliation: typeof org_affiliation === "string" ? org_affiliation : null,
             notes: typeof notes === "string" ? notes : null,
             expiry_days:
-              typeof expiry_days === "number" && expiry_days > 0 ? expiry_days : undefined,
+              typeof expiry_days === "number" && expiry_days > 0
+                ? Math.min(expiry_days, MAX_EXPIRY_DAYS)
+                : undefined,
           });
         }
 
@@ -708,7 +726,7 @@ export function createApiRouter(): Router {
         if (mode === "audit") updates.mode = GateMode.AUDIT;
         if (mode === "block") updates.mode = GateMode.BLOCK;
         if (typeof expiry_days === "number" && expiry_days > 0) {
-          updates.expiryDays = expiry_days;
+          updates.expiryDays = Math.min(expiry_days, MAX_EXPIRY_DAYS);
         }
 
         const updated = await updateRepositoryConfig(owner, repo, updates);
@@ -853,7 +871,12 @@ function pruneOauthStates(): void {
 }
 
 function escText(s: string): string {
-  return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
@@ -949,6 +972,12 @@ export function createAuthRouter(): Router {
 
       // Token goes in the URL fragment — never sent to any server.
       const base = (process.env.DASHBOARD_URL ?? "/dashboard").replace(/\/$/, "");
+      // Guard against open-redirect: only allow relative paths or https:// URLs.
+      if (!base.startsWith("/") && !base.startsWith("https://")) {
+        logger.error({ dashboardUrl: base }, "DASHBOARD_URL must be a relative path or https:// URL");
+        res.type("text").status(500).send("Server misconfiguration — DASHBOARD_URL is not a safe redirect target.");
+        return;
+      }
       res.redirect(`${base}#token=${encodeURIComponent(data.access_token)}`);
     } catch (err) {
       logger.error({ err }, "GET /auth/github/callback error");
