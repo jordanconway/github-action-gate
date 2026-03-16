@@ -1,8 +1,8 @@
 import { Context } from "probot";
-import { parseWorkflowJobs } from "../services/workflow-parser";
-import { checkGate, buildCheckOutput } from "../services/gate";
-import { ensureRepository } from "../services/attestation";
-import { WorkflowRef } from "../types";
+import { parseWorkflowJobs } from "../services/workflow-parser.js";
+import { checkGate, buildCheckOutput } from "../services/gate.js";
+import { ensureRepository } from "../services/attestation.js";
+import { WorkflowRef } from "../types/index.js";
 
 const WORKFLOW_PATH_RE = /^\.github\/workflows\/.+\.ya?ml$/;
 const CHECK_NAME = "Action Gate";
@@ -39,7 +39,7 @@ export async function handlePullRequest(context: PRContext) {
   );
 
   // Determine which workflow files this PR touches.
-  const { data: files } = await context.octokit.pulls.listFiles({
+  const { data: files } = await context.octokit.rest.pulls.listFiles({
     owner,
     repo,
     pull_number: pr.number,
@@ -47,13 +47,13 @@ export async function handlePullRequest(context: PRContext) {
   });
 
   const workflowFiles = files.filter(
-    (f) => WORKFLOW_PATH_RE.test(f.filename) && f.status !== "removed"
+    (f: { filename: string; status: string }) => WORKFLOW_PATH_RE.test(f.filename) && f.status !== "removed"
   );
 
   if (workflowFiles.length === 0) return;
 
   // Open a pending check run so GitHub shows "in progress" immediately.
-  const { data: checkRun } = await context.octokit.checks.create({
+  const { data: checkRun } = await context.octokit.rest.checks.create({
     owner,
     repo,
     name: CHECK_NAME,
@@ -66,7 +66,7 @@ export async function handlePullRequest(context: PRContext) {
   const workflows: WorkflowRef[] = [];
   for (const file of workflowFiles) {
     try {
-      const { data: content } = await context.octokit.repos.getContent({
+      const { data: content } = await context.octokit.rest.repos.getContent({
         owner,
         repo,
         path: file.filename,
@@ -88,7 +88,7 @@ export async function handlePullRequest(context: PRContext) {
   const summary = await checkGate(owner, repo, workflows);
   const output = buildCheckOutput(summary);
 
-  await context.octokit.checks.update({
+  await context.octokit.rest.checks.update({
     owner,
     repo,
     check_run_id: checkRun.id,

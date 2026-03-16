@@ -11,13 +11,14 @@
  * `prisma` from `db/client`, which is swapped per-request via `setPrisma()`.
  */
 
-import { createD1Client, setPrisma } from "./db/client";
-import { createApiRouter, createAuthRouter } from "./api/routes";
-import { handlePullRequest } from "./handlers/pull-request";
-import { handleWorkflowRun } from "./handlers/workflow-run";
-import { handleWorkflowJob } from "./handlers/workflow-job";
-import { ensureRepository } from "./services/attestation";
-import { logger } from "./logger";
+import { createD1Client, setPrisma } from "./db/client.js";
+import { createApiRouter, createAuthRouter } from "./api/routes.js";
+import { handlePullRequest } from "./handlers/pull-request.js";
+import { handleWorkflowRun } from "./handlers/workflow-run.js";
+import { handleWorkflowJob } from "./handlers/workflow-job.js";
+import { ensureRepository } from "./services/attestation.js";
+import { logger } from "./logger.js";
+import { Readable } from "node:stream";
 import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import cors from "cors";
@@ -321,8 +322,6 @@ function expressToFetchResponse(
 ): Promise<Response> {
   return new Promise((resolve) => {
     const url = new URL(request.url);
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { Readable } = require("stream");
 
     // Build a minimal Node IncomingMessage-like object
     const bodyStream = new Readable({ read() {} });

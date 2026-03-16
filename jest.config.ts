@@ -9,15 +9,23 @@ const config: Config = {
     "src/**/*.ts",
     "!src/index.ts",
     "!src/**/*.d.ts",
+    "!src/generated/**",
   ],
   resetMocks: true,
+  // Strip .js from relative imports so Jest resolves .ts source files.
+  // Source files use .js extensions for ESM (NodeNext), but tests run as CJS.
+  moduleNameMapper: {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+  },
   transform: {
     "^.+\\.tsx?$": [
       "ts-jest",
       {
         tsconfig: {
-          // Allow test files to live outside the src rootDir
+          // Tests run as CJS under jest — override the ESM settings.
           rootDir: ".",
+          module: "commonjs",
+          moduleResolution: "node",
         },
       },
     ],

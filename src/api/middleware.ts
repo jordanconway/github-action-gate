@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from "express";
-import { RetryOctokit } from "./octokit";
+import { RetryOctokit } from "./octokit.js";
 
 export interface GitHubUser {
   id: number;

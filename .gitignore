@@ -9,6 +9,7 @@ dist/
 
 # Prisma generated client (reproduced by `prisma generate`)
 node_modules/.prisma/
+src/generated/
 
 # SQLite local dev database
 prisma/dev.db

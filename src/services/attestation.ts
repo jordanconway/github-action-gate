@@ -1,6 +1,6 @@
-import { Attestation, Prisma } from "@prisma/client";
-import { AttestationTier, GateMode } from "../types";
-import { prisma } from "../db/client";
+import { Attestation, Prisma } from "../generated/prisma/client.js";
+import { AttestationTier, GateMode } from "../types/index.js";
+import { prisma } from "../db/client.js";
 
 // ─── Repository ───────────────────────────────────────────────────────────────
 
