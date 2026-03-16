@@ -297,6 +297,11 @@ tbody tr:hover { background: color-mix(in srgb, var(--color-surface) 80%, var(--
   color: var(--color-muted);
   font-size: 0.8rem;
 }
+.deploy-sha {
+  font-family: var(--font-mono, 'SFMono-Regular', 'Consolas', 'Liberation Mono', monospace);
+  font-size: 0.75rem;
+  opacity: 0.65;
+}
 
 /* ─── Responsive ────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {

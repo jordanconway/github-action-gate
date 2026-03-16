@@ -259,9 +259,12 @@
     <footer class="site-footer">
       <div class="container">
         <p>
-          Action Gate &mdash;
+          Action Gate
+          <!-- __GIT_SHA__ is replaced at deploy time by CI -->
+          <span id="deploy-sha" class="deploy-sha">__GIT_SHA__</span>
+          &mdash;
           <a
-            href="https://github.com/linuxfoundation/github-action-gate"
+            href="https://github.com/jordanconway/github-action-gate"
             target="_blank"
             rel="noopener noreferrer"
             >GitHub</a

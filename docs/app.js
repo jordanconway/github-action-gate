@@ -833,6 +833,24 @@ $("btn-refresh-runs").addEventListener("click", loadRecentRuns);
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+// Turn the deploy SHA placeholder into a commit link (or hide it if unstamped).
+(function initDeploySha() {
+  const el = $("deploy-sha");
+  if (!el) return;
+  const sha = el.textContent.trim();
+  if (!sha || sha === "__GIT_SHA__") {
+    el.hidden = true;
+    return;
+  }
+  const link = document.createElement("a");
+  link.href = `https://github.com/jordanconway/github-action-gate/commit/${encodeURIComponent(sha)}`;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = sha;
+  link.className = "deploy-sha";
+  el.replaceWith(link);
+})();
+
 initSorting();
 loadSummary();
 loadRecentRuns();
