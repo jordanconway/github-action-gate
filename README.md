@@ -121,13 +121,26 @@ npm run d1:migrate:remote
 
 ```bash
 wrangler secret put APP_ID
-wrangler secret put PRIVATE_KEY
 wrangler secret put WEBHOOK_SECRET
 wrangler secret put GITHUB_CLIENT_ID
 wrangler secret put GITHUB_CLIENT_SECRET
 wrangler secret put API_BASE_URL
 wrangler secret put DASHBOARD_URL
 ```
+
+**Private key** — pipe the PEM file directly to avoid shell quoting issues:
+
+```bash
+cat /path/to/your-app.private-key.pem | wrangler secret put PRIVATE_KEY
+```
+
+> **Important:** Do not wrap the value in quotes. `wrangler secret put` reads
+> from stdin, and any surrounding `"` characters become part of the stored
+> value, which corrupts the PEM format.
+>
+> The Worker automatically converts PKCS#1 keys (`BEGIN RSA PRIVATE KEY`) to
+> PKCS#8 (`BEGIN PRIVATE KEY`) at runtime, since Cloudflare Workers' Web Crypto
+> API only supports PKCS#8. No manual key conversion is needed.
 
 ### 4. Deploy
 
