@@ -5,7 +5,7 @@
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc && tsc -p tsconfig.worker.json",
+    "build": "tsc && tsc -p tsconfig.worker.json && cp src/generated/prisma/internal/query_compiler_bg.wasm dist-worker/generated/prisma/internal/",
     "start": "probot run ./dist/index.js",
     "dev": "tsc && probot run ./dist/index.js",
     "prisma:generate": "prisma generate && bash scripts/patch-prisma-for-workers.sh",
