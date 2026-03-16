@@ -1,6 +1,6 @@
-import { GateMode } from "../types";
-import { checkAttestationStatus, getRepository } from "./attestation";
-import { AttestationTier, CheckOutput, GateCheckResult, GateSummary, WorkflowRef } from "../types";
+import { GateMode } from "../types/index.js";
+import { checkAttestationStatus, getRepository } from "./attestation.js";
+import { AttestationTier, CheckOutput, GateCheckResult, GateSummary, WorkflowRef } from "../types/index.js";
 
 // ─── Core gate logic ─────────────────────────────────────────────────────────
 

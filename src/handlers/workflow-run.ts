@@ -1,8 +1,8 @@
 import { Context } from "probot";
-import { parseWorkflowJobs } from "../services/workflow-parser";
-import { checkGate, buildCheckOutput } from "../services/gate";
-import { ensureRepository } from "../services/attestation";
-import { prisma } from "../db/client";
+import { parseWorkflowJobs } from "../services/workflow-parser.js";
+import { checkGate, buildCheckOutput } from "../services/gate.js";
+import { ensureRepository } from "../services/attestation.js";
+import { prisma } from "../db/client.js";
 
 const CHECK_NAME = "Action Gate / Workflow";
 
@@ -35,7 +35,7 @@ export async function handleWorkflowRun(context: Context<"workflow_run.requested
   // Fetch the workflow file at the exact SHA that triggered this run.
   let jobs: string[] = [];
   try {
-    const { data: content } = await context.octokit.repos.getContent({
+    const { data: content } = await context.octokit.rest.repos.getContent({
       owner,
       repo,
       path: run.path,
@@ -52,7 +52,7 @@ export async function handleWorkflowRun(context: Context<"workflow_run.requested
   const summary = await checkGate(owner, repo, [{ path: run.path, jobs }]);
   const output = buildCheckOutput(summary);
 
-  await context.octokit.checks.create({
+  await context.octokit.rest.checks.create({
     owner,
     repo,
     name: CHECK_NAME,
@@ -88,7 +88,7 @@ export async function handleWorkflowRun(context: Context<"workflow_run.requested
         conclusion: run.conclusion ?? null,
       },
     })
-    .catch((err) => context.log.warn({ err }, "Failed to persist workflow run"));
+    .catch((err: unknown) => context.log.warn({ err }, "Failed to persist workflow run"));
 
   // Prune runs older than the most recent 500 for this repo.
   const oldest = await prisma.workflowRun.findMany({

@@ -1,6 +1,6 @@
 import { Context } from "probot";
-import { checkGate, buildCheckOutput } from "../services/gate";
-import { ensureRepository } from "../services/attestation";
+import { checkGate, buildCheckOutput } from "../services/gate.js";
+import { ensureRepository } from "../services/attestation.js";
 
 const CHECK_NAME_PREFIX = "Action Gate / Job";
 
@@ -29,7 +29,7 @@ export async function handleWorkflowJob(context: Context<"workflow_job.queued">)
   // Fetch the parent workflow run to get the workflow file path.
   let workflowPath: string;
   try {
-    const { data: run } = await context.octokit.actions.getWorkflowRun({
+    const { data: run } = await context.octokit.rest.actions.getWorkflowRun({
       owner,
       repo,
       run_id: job.run_id,
@@ -46,7 +46,7 @@ export async function handleWorkflowJob(context: Context<"workflow_job.queued">)
   const summary = await checkGate(owner, repo, [{ path: workflowPath, jobs: [job.name] }]);
   const output = buildCheckOutput(summary);
 
-  await context.octokit.checks.create({
+  await context.octokit.rest.checks.create({
     owner,
     repo,
     // Include the job name so each job gets its own distinct check entry.

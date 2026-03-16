@@ -2,18 +2,18 @@ import { Probot } from "probot";
 import cors from "cors";
 import express, { Router } from "express";
 import rateLimit from "express-rate-limit";
-import { handlePullRequest } from "./handlers/pull-request";
-import { handleWorkflowRun } from "./handlers/workflow-run";
-import { handleWorkflowJob } from "./handlers/workflow-job";
-import { createApiRouter, createAuthRouter } from "./api/routes";
-import { ensureRepository } from "./services/attestation";
+import { handlePullRequest } from "./handlers/pull-request.js";
+import { handleWorkflowRun } from "./handlers/workflow-run.js";
+import { handleWorkflowJob } from "./handlers/workflow-job.js";
+import { createApiRouter, createAuthRouter } from "./api/routes.js";
+import { ensureRepository } from "./services/attestation.js";
 
-// Probot v13 passes { getRouter } as the second argument.
+// Probot v14 passes { getRouter } as the second argument.
 interface AppOptions {
   getRouter: (path?: string) => Router;
 }
 
-export = function actionGate(bot: Probot, { getRouter }: AppOptions) {
+export default function actionGate(bot: Probot, { getRouter }: AppOptions) {
   // ── REST API ───────────────────────────────────────────────────────────────
   const router = getRouter("/");
 
@@ -107,4 +107,4 @@ export = function actionGate(bot: Probot, { getRouter }: AppOptions) {
   });
 
   bot.log.info("Action Gate is ready");
-};
+}

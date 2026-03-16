@@ -1,22 +1,27 @@
-import crypto from "crypto";
+import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
-import { AttestationTier, GateMode } from "../types";
-import { RetryOctokit } from "./octokit";
+import { AttestationTier, GateMode } from "../types/index.js";
+import { RetryOctokit } from "./octokit.js";
 import {
   createAttestation,
   listAttestations,
   revokeAttestation,
   getRepository,
   updateRepositoryConfig,
-} from "../services/attestation";
-import { authenticateUser, AuthRequest } from "./middleware";
-import { prisma } from "../db/client";
-import { logger } from "../logger";
+} from "../services/attestation.js";
+import { authenticateUser, AuthRequest } from "./middleware.js";
+import { prisma } from "../db/client.js";
+import { logger } from "../logger.js";
 
 // GitHub owner/repo names: alphanumeric, hyphens, dots, underscores; max 100 chars.
 const GITHUB_NAME_RE = /^[a-zA-Z0-9._-]{1,100}$/;
 // CUID format used by Prisma @default(cuid()) — 25-char lowercase alphanumeric.
 const CUID_RE = /^c[a-z0-9]{24}$/;
+
+/** Express 5 params are `string | string[]` — extract the scalar string. */
+function str(v: string | string[] | undefined): string {
+  return Array.isArray(v) ? v[0] : v ?? "";
+}
 
 /** Fire-and-forget audit log write. Never blocks the response. */
 function audit(
@@ -35,7 +40,7 @@ function audit(
         ipAddress: ipAddress ?? null,
       },
     })
-    .catch((err) => logger.error({ err }, "audit log write failed"));
+    .catch((err: unknown) => logger.error({ err }, "audit log write failed"));
 }
 
 export function createApiRouter(): Router {
@@ -78,12 +83,12 @@ export function createApiRouter(): Router {
   /** GET /api/v1/attestations/:id */
   router.get("/attestations/:id", async (req: Request, res: Response) => {
     try {
-      if (!CUID_RE.test(req.params.id)) {
+      if (!CUID_RE.test(str(req.params.id))) {
         res.status(400).json({ error: "Invalid attestation ID format" });
         return;
       }
       const attestation = await prisma.attestation.findUnique({
-        where: { id: req.params.id },
+        where: { id: str(req.params.id) },
         include: { repository: { select: { owner: true, name: true } } },
       });
       if (!attestation) {
@@ -535,12 +540,12 @@ export function createApiRouter(): Router {
     authenticateUser as unknown as (req: Request, res: Response, next: () => void) => void,
     async (req: AuthRequest, res: Response) => {
       try {
-        if (!CUID_RE.test(req.params.id)) {
+        if (!CUID_RE.test(str(req.params.id))) {
           res.status(400).json({ error: "Invalid attestation ID format" });
           return;
         }
         const attestation = await prisma.attestation.findUnique({
-          where: { id: req.params.id },
+          where: { id: str(req.params.id) },
           include: { repository: true },
         });
 
@@ -573,13 +578,13 @@ export function createApiRouter(): Router {
           return;
         }
 
-        const revoked = await revokeAttestation(req.params.id, req.user!.login);
+        const revoked = await revokeAttestation(str(req.params.id), req.user!.login);
 
         audit(
           "attestation.revoke",
           { login: req.user!.login, id: req.user!.id },
           {
-            attestationId: req.params.id,
+            attestationId: str(req.params.id),
             repository: `${attestation.repository.owner}/${attestation.repository.name}`,
             workflowPath: attestation.workflowPath,
           },
@@ -632,13 +637,13 @@ export function createApiRouter(): Router {
   /** GET /api/v1/repositories/:owner/:repo */
   router.get("/repositories/:owner/:repo", async (req: Request, res: Response) => {
     try {
-      if (!GITHUB_NAME_RE.test(req.params.owner) || !GITHUB_NAME_RE.test(req.params.repo)) {
+      if (!GITHUB_NAME_RE.test(str(req.params.owner)) || !GITHUB_NAME_RE.test(str(req.params.repo))) {
         res.status(400).json({ error: "Invalid owner or repository name" });
         return;
       }
       const repo = await prisma.repository.findUnique({
         where: {
-          owner_name: { owner: req.params.owner, name: req.params.repo },
+          owner_name: { owner: str(req.params.owner), name: str(req.params.repo) },
         },
         include: {
           _count: {
@@ -671,7 +676,8 @@ export function createApiRouter(): Router {
     authenticateUser as unknown as (req: Request, res: Response, next: () => void) => void,
     async (req: AuthRequest, res: Response) => {
       try {
-        const { owner, repo } = req.params;
+        const owner = str(req.params.owner);
+        const repo = str(req.params.repo);
         if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo)) {
           res.status(400).json({ error: "Invalid owner or repository name" });
           return;
@@ -787,19 +793,22 @@ export function createApiRouter(): Router {
         },
       });
 
+      // Type alias for the workflow run shape returned by the include query.
+      type RunRow = { repositoryId: string; workflowPath: string };
+
       // Determine which workflow paths already have an active attestation
       // so the dashboard can hide the Vouch button / filter the row.
       const now = new Date();
       const uniqueTargets = [
         ...new Set(
-          runs.filter((r) => r.repositoryId).map((r) => `${r.repositoryId}::${r.workflowPath}`)
+          (runs as RunRow[]).filter((r) => r.repositoryId).map((r) => `${r.repositoryId}::${r.workflowPath}`)
         ),
       ];
 
       const activeAttestations = uniqueTargets.length
         ? await prisma.attestation.findMany({
             where: {
-              repositoryId: { in: [...new Set(runs.map((r) => r.repositoryId))] },
+              repositoryId: { in: [...new Set((runs as RunRow[]).map((r) => r.repositoryId))] },
               jobName: null, // workflow-level only
               revokedAt: null,
               expiresAt: { gt: now },
@@ -809,10 +818,10 @@ export function createApiRouter(): Router {
         : [];
 
       const attestedSet = new Set(
-        activeAttestations.map((a) => `${a.repositoryId}::${a.workflowPath}`)
+        (activeAttestations as RunRow[]).map((a) => `${a.repositoryId}::${a.workflowPath}`)
       );
 
-      const enriched = runs.map((r) => ({
+      const enriched = (runs as RunRow[]).map((r) => ({
         ...r,
         isAttested: attestedSet.has(`${r.repositoryId}::${r.workflowPath}`),
       }));

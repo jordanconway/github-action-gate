@@ -89,8 +89,10 @@ function makeContext(overrides: Record<string, unknown> = {}) {
       },
     },
     octokit: {
-      repos: { getContent: reposGetContent },
-      checks: { create: checksCreate },
+      rest: {
+        repos: { getContent: reposGetContent },
+        checks: { create: checksCreate },
+      },
     },
     log: {
       warn: jest.fn(),
@@ -137,7 +139,7 @@ describe("handleWorkflowRun", () => {
 
     await handleWorkflowRun(ctx);
 
-    expect(ctx.octokit.checks.create).toHaveBeenCalledWith(
+    expect(ctx.octokit.rest.checks.create).toHaveBeenCalledWith(
       expect.objectContaining({
         owner: "acme",
         repo: "app",
@@ -155,7 +157,7 @@ describe("handleWorkflowRun", () => {
 
   it("proceeds with empty jobs list when workflow YAML fetch fails", async () => {
     const ctx = makeContext();
-    (ctx.octokit.repos.getContent as unknown as jest.Mock).mockRejectedValue(
+    (ctx.octokit.rest.repos.getContent as unknown as jest.Mock).mockRejectedValue(
       new Error("Not found")
     );
 

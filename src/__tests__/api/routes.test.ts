@@ -78,12 +78,12 @@ beforeEach(() => {
 // Make authenticateUser a pass-through by default (attaches a test user)
 const mockAuth = authenticateUser as jest.MockedFunction<typeof authenticateUser>;
 
-// Build the Express app for tests
+// Build the Express app for tests (cast to any for supertest + Express 5 compat)
 function buildApp() {
   const app = express();
   app.use(express.json());
   app.use("/api/v1", createApiRouter());
-  return app;
+  return app as any;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ describe("GET /api/v1/attestations/:id", () => {
 describe("POST /api/v1/attestations", () => {
   beforeEach(() => {
     // Make auth middleware pass and inject a test user
-    mockAuth.mockImplementation(async (req: any, _res, next) => {
+    mockAuth.mockImplementation(async (req: any, _res: any, next: any) => {
       req.user = { id: 1, login: "alice", name: "Alice", email: null };
       req.token = "test-token";
       next();

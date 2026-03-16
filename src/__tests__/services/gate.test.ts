@@ -4,6 +4,10 @@ import { AttestationTier, GateMode, GateSummary, GateCheckResult } from "../../t
 // ── Mock the attestation service ───────────────────────────────────────────────
 jest.mock("../../services/attestation");
 
+// Prevent the ESM-only @prisma/adapter-d1 from being loaded via the
+// attestation → db/client import chain.
+jest.mock("../../db/client", () => ({ prisma: {} }));
+
 import { getRepository, checkAttestationStatus } from "../../services/attestation";
 
 const mockGetRepository = getRepository as jest.MockedFunction<typeof getRepository>;
