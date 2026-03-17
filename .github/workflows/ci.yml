@@ -160,8 +160,10 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
-      - name: Stamp git SHA into dashboard
-        run: sed -i "s/__GIT_SHA__/${GITHUB_SHA::8}/g" docs/index.html docs/my-attestations.html
+      - name: Stamp git SHA and repo into dashboard
+        run: |
+          sed -i "s/__GIT_SHA__/${GITHUB_SHA::8}/g" docs/index.html docs/my-attestations.html
+          sed -i "s|__GITHUB_REPO__|${GITHUB_REPOSITORY}|g" docs/index.html docs/my-attestations.html docs/app.js docs/my-attestations.js
 
       - name: Deploy dashboard
         run: npx wrangler pages deploy docs --project-name action-gate-dashboard --commit-dirty=true

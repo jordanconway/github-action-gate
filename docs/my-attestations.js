@@ -388,7 +388,7 @@ document.addEventListener("click", (e) => {
     return;
   }
   const link = document.createElement("a");
-  link.href = `https://github.com/jordanconway/github-action-gate/commit/${encodeURIComponent(sha)}`;
+  link.href = `https://github.com/__GITHUB_REPO__/commit/${encodeURIComponent(sha)}`;
   link.target = "_blank";
   link.rel = "noopener noreferrer";
   link.textContent = sha;

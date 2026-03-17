@@ -103,6 +103,7 @@ The deploy step in CI stamps the git SHA into the dashboard footer via
   query compiler must be statically imported (see patch script).
 - Wrangler reads from `dist-worker/`, not `src/`. Always `npm run build`
   after source changes before manual deploys.
-- The `__GIT_SHA__` placeholder in `docs/index.html` and
-  `docs/my-attestations.html` is replaced by CI at deploy time —
-  don't change it to a real hash in source.
+- The `__GIT_SHA__` and `__GITHUB_REPO__` placeholders in dashboard files
+  (`docs/index.html`, `docs/my-attestations.html`, `docs/app.js`,
+  `docs/my-attestations.js`) are replaced by CI at deploy time —
+  don't change them to real values in source.
