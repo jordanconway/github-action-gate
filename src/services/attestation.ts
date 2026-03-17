@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import { Attestation, Prisma } from "../generated/prisma/client.js";
 import { AttestationTier, GateMode } from "../types/index.js";
 import { prisma } from "../db/client.js";

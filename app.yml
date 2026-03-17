@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # GitHub App manifest
 # Use this to create/register the GitHub App at:
 #   https://github.com/settings/apps/new?manifest=...

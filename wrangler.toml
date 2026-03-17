@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 name = "github-action-gate"
 main = "dist-worker/worker.js"
 compatibility_date = "2024-11-01"

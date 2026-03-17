@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import { Octokit } from "@octokit/rest";
 import { retry } from "@octokit/plugin-retry";
 

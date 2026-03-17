@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 /* global ACTION_GATE_API_URL */
 "use strict";
 

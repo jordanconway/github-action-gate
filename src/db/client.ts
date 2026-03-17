@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import { PrismaClient } from "../generated/prisma/client.js";
 import { PrismaD1 } from "@prisma/adapter-d1";
 

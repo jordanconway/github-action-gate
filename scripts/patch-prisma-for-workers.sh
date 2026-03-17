@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# SPDX-FileCopyrightText: 2026 The Linux Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
 # Patch the Prisma-generated client so it can run inside Cloudflare Workers
 # where:
 # - import.meta.url is undefined in bundled modules

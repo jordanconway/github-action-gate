@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import { Context } from "probot";
 import { parseWorkflowJobs } from "../services/workflow-parser.js";
 import { checkGate, buildCheckOutput } from "../services/gate.js";

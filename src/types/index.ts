@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // SQLite doesn't support Prisma native enums; these are stored as plain TEXT.
 // Defining them locally keeps type safety throughout the codebase.
 export enum GateMode {

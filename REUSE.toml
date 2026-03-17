@@ -1,0 +1,39 @@
+version = 1
+SPDX-PackageName = "github-action-gate"
+SPDX-PackageSupplier = "https://github.com/jordanconway/github-action-gate"
+
+[[annotations]]
+path = ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.worker.json", ".markdownlint.json", ".prettierrc", ".prettierignore"]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Linux Foundation"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "docs/assets/**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Linux Foundation"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "prisma/dev.db-journal"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Linux Foundation"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "prisma/migrations/migration_lock.toml"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Linux Foundation"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "prisma/migrations/**/migration.sql"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Linux Foundation"
+SPDX-License-Identifier = "Apache-2.0"
+
+[[annotations]]
+path = "migrations/**.sql"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 The Linux Foundation"
+SPDX-License-Identifier = "Apache-2.0"

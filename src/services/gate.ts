@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import { GateMode } from "../types/index.js";
 import { checkAttestationStatus, getRepository } from "./attestation.js";
 import { AttestationTier, CheckOutput, GateCheckResult, GateSummary, WorkflowRef } from "../types/index.js";

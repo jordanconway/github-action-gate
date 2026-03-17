@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 import crypto from "node:crypto";
 import { Router, Request, Response } from "express";
 import { AttestationTier, GateMode } from "../types/index.js";

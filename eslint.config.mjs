@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 The Linux Foundation
+//
+// SPDX-License-Identifier: Apache-2.0
+
 // @ts-check
 import tseslint from "typescript-eslint";
 import eslintConfigPrettier from "eslint-config-prettier";
