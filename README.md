@@ -27,21 +27,21 @@ GitHub Actions workflows execute arbitrary code with repository secrets. In larg
 ## Concepts
 
 | Concept | Description |
-|---|---|
+| --- | --- |
 | **Attestation** | A record that a specific user or org vouches for a workflow file (or individual job within it) |
 | **Tier** | `user` — self-reported; `organization` — GitHub org membership is verified server-side |
 | **Gate mode** | `audit` (default) — warn only; `block` — fail the check run |
-| **Expiry** | Attestations expire after a configurable number of days (default 180) |
+| **Expiry** | Attestations expire after a configurable number of days (default 180, max 730) |
 
 ---
 
 ## Stack
 
-- **Runtime**: [Probot](https://probot.github.io/) v13 (TypeScript)
-- **Database**: SQLite (local dev) via [Prisma](https://www.prisma.io/) v5 / [Cloudflare D1](https://developers.cloudflare.com/d1/) (production)
-- **Deployment**: [Cloudflare Workers](https://workers.cloudflare.com/) with Node.js compatibility
-- **API**: Express REST API mounted on the Probot router
-- **Dashboard**: Static GitHub Pages site (`docs/`) with GitHub OAuth login
+- **Runtime**: [Cloudflare Workers](https://workers.cloudflare.com/) with `nodejs_compat`
+- **Framework**: [Express 5](https://expressjs.com/) + [Probot 14](https://probot.github.io/) (context objects built manually for Workers)
+- **Database**: [Prisma 7](https://www.prisma.io/) with `@prisma/adapter-d1` / SQLite (local dev) / [Cloudflare D1](https://developers.cloudflare.com/d1/) (production)
+- **Dashboard**: Vanilla HTML/CSS/JS on [Cloudflare Pages](https://pages.cloudflare.com/)
+- **CI/CD**: Single GitHub Actions workflow — Lint → Test → Deploy (gated on deployable changes)
 
 ---
 
@@ -58,7 +58,11 @@ GitHub Actions workflows execute arbitrary code with repository secrets. In larg
 ```bash
 npm install
 npx prisma generate
+bash scripts/patch-prisma-for-workers.sh
 ```
+
+The patch script rewrites Prisma's generated client for Cloudflare Workers
+compatibility (static WASM import instead of runtime compilation).
 
 ### 3. Configure
 
@@ -70,7 +74,7 @@ cp .env.example .env
 Required env vars:
 
 | Variable | Description |
-|---|---|
+| --- | --- |
 | `APP_ID` | GitHub App ID |
 | `PRIVATE_KEY` | GitHub App private key (PEM, newlines as `\n`) |
 | `WEBHOOK_SECRET` | Webhook secret set in GitHub App settings |
@@ -78,7 +82,8 @@ Required env vars:
 | `GITHUB_CLIENT_ID` | OAuth App client ID (for dashboard login) |
 | `GITHUB_CLIENT_SECRET` | OAuth App client secret |
 | `API_BASE_URL` | Public URL of this server (e.g. `https://action-gate.example.com`) |
-| `DASHBOARD_URL` | Public URL of the dashboard (e.g. `https://your-org.github.io/github-action-gate`) |
+| `DASHBOARD_URL` | Public URL of the dashboard |
+| `CORS_ORIGINS` | Comma-separated allowed origins (defaults to `*`) |
 
 ### 4. Run locally
 
@@ -126,6 +131,7 @@ wrangler secret put GITHUB_CLIENT_ID
 wrangler secret put GITHUB_CLIENT_SECRET
 wrangler secret put API_BASE_URL
 wrangler secret put DASHBOARD_URL
+wrangler secret put CORS_ORIGINS
 ```
 
 **Private key** — pipe the PEM file directly to avoid shell quoting issues:
@@ -142,12 +148,37 @@ cat /path/to/your-app.private-key.pem | wrangler secret put PRIVATE_KEY
 > PKCS#8 (`BEGIN PRIVATE KEY`) at runtime, since Cloudflare Workers' Web Crypto
 > API only supports PKCS#8. No manual key conversion is needed.
 
-### 4. Deploy
+### 4. Build and deploy
 
 ```bash
+npx prisma generate
+bash scripts/patch-prisma-for-workers.sh
 npm run build
-wrangler deploy
+npx wrangler deploy                                          # API worker
+npx wrangler pages deploy docs --project-name <project-name> # dashboard
 ```
+
+> **Note:** Wrangler reads from `dist-worker/`, not `src/`. Always run
+> `npm run build` after source changes before manual deploys.
+
+---
+
+## CI/CD
+
+A single GitHub Actions workflow (`.github/workflows/ci.yml`) handles everything:
+
+```text
+Lint     ──┐
+Test     ──┼── Deploy (main + deployable changes only)
+Changes  ──┘
+```
+
+- **Lint**: ESLint, actionlint, ShellCheck
+- **Test**: TypeScript type-check, Jest (68 tests)
+- **Changes**: Detects if any deployable paths were modified (`src/`, `docs/`, `prisma/`, `scripts/`, `package*`, `tsconfig*`, `wrangler.toml`)
+- **Deploy**: Runs only on `main` when both lint and test pass *and* deployable files changed. Manual `workflow_dispatch` always deploys.
+
+The deploy step stamps the git SHA into the dashboard footer before the Pages deploy.
 
 ---
 
@@ -156,17 +187,20 @@ wrangler deploy
 In your [GitHub App settings](https://github.com/settings/apps):
 
 **Permissions (Repository)**
+
 - `Checks` — Read & Write
 - `Contents` — Read-only
 - `Pull requests` — Read-only
 
 **Events to subscribe**
+
 - `Pull request`
 - `Workflow job`
 - `Workflow run`
 
 **Authorization callback URL** (for OAuth dashboard login)
-```
+
+```text
 https://your-server.example.com/auth/github/callback
 ```
 
@@ -179,20 +213,35 @@ All authenticated endpoints require a `Authorization: Bearer <github_token>` hea
 ### Attestation endpoints
 
 | Method | Path | Auth | Description |
-|---|---|---|---|
-| `GET` | `/api/v1/attestations` | — | List attestations (filterable) |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/attestations` | — | List attestations (filterable by owner, repo, workflow, job, voucher, org) |
 | `GET` | `/api/v1/attestations/:id` | — | Get a single attestation |
 | `POST` | `/api/v1/attestations` | ✓ | Create an attestation |
-| `DELETE` | `/api/v1/attestations/:id` | ✓ | Revoke an attestation |
+| `POST` | `/api/v1/attestations/batch` | ✓ | Create up to 50 attestations in one request |
+| `DELETE` | `/api/v1/attestations/:id` | ✓ | Revoke an attestation (owner or repo admin) |
 
 ### Repository endpoints
 
 | Method | Path | Auth | Description |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `GET` | `/api/v1/repositories` | — | List known repositories |
 | `GET` | `/api/v1/repositories/:owner/:repo` | — | Get one repository |
 | `PUT` | `/api/v1/repositories/:owner/:repo/config` | ✓ admin | Update gate mode / expiry |
+
+### Dashboard endpoints
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
 | `GET` | `/api/v1/summary` | — | Dashboard summary stats |
+| `GET` | `/api/v1/runs/recent` | — | Recent workflow runs (filterable by owner, repo) |
+| `GET` | `/api/v1/health` | — | Health check |
+
+### OAuth
+
+| Method | Path | Description |
+| --- | --- | --- |
+| `GET` | `/auth/github` | Redirect to GitHub OAuth |
+| `GET` | `/auth/github/callback` | OAuth callback — exchanges code for token |
 
 ### Example: create a user-tier attestation
 
@@ -223,22 +272,42 @@ curl -X PUT https://your-server.example.com/api/v1/repositories/owner/repo/confi
 
 ## Dashboard
 
-The `docs/` directory is a self-contained static site that connects to the API. Host it on GitHub Pages (or any static host) and set `window.ACTION_GATE_API_URL` in `docs/index.html` to your API base URL.
+The `docs/` directory is a self-contained static site deployed to Cloudflare Pages.
+Set `window.ACTION_GATE_API_URL` in `docs/index.html` to your API base URL.
 
-Users can log in with their GitHub account via the **Login with GitHub** button to create attestations directly from the UI.
+Users can log in with their GitHub account via the **Login with GitHub** button
+to create attestations directly from the UI, including batch vouching from
+the recent workflow runs table.
 
 ---
 
 ## Development
 
 ```bash
-npm run build          # compile TypeScript
-npm run dev            # tsc + start probot
+npm run build          # compile TypeScript + copy WASM to dist-worker/
+npm run dev            # tsc + start probot (local dev)
 npm run type-check     # type-check without emitting
+npm run lint           # run ESLint
+npm test               # run Jest tests
 npm run prisma:studio  # open Prisma Studio (local SQLite)
 npm run d1:create      # create Cloudflare D1 database
 npm run d1:migrate:local   # apply migrations to local D1 environment
 npm run d1:migrate:remote  # apply migrations to production D1
+```
+
+### Pre-commit checks
+
+Always run the full CI check locally before committing:
+
+```bash
+npm run type-check && npm run lint && npm test
+```
+
+For workflow or script changes, also run:
+
+```bash
+actionlint .github/workflows/*.yml
+shellcheck scripts/*.sh
 ```
 
 ---
