@@ -94,6 +94,8 @@ pre code { background: none; border: none; padding: 0; }
   text-align: center;
 }
 .stat-card.warning { border-color: var(--color-warning); }
+a.stat-card { text-decoration: none; color: inherit; display: block; }
+a.stat-card:hover { border-color: var(--color-primary); }
 .stat-value { font-size: 2rem; font-weight: 700; line-height: 1.2; }
 .stat-label { font-size: 0.8rem; color: var(--color-muted); margin-top: 4px; }
 
@@ -253,6 +255,8 @@ tbody tr:hover { background: color-mix(in srgb, var(--color-surface) 80%, var(--
 .badge-expired  { background: var(--color-warning-bg); color: var(--color-warning); }
 .badge-expiring { background: var(--color-warning-bg); color: var(--color-warning); }
 .badge-revoked  { background: var(--color-danger-bg); color: var(--color-danger); }
+.badge-danger   { background: var(--color-danger-bg); color: var(--color-danger); }
+.badge-warn     { background: var(--color-warning-bg); color: var(--color-warning); }
 
 /* ─── Loading / error ───────────────────────────────────────────────────── */
 .loading-state, .error-state {

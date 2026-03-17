@@ -162,8 +162,8 @@ jobs:
 
       - name: Stamp git SHA and repo into dashboard
         run: |
-          sed -i "s/__GIT_SHA__/${GITHUB_SHA::8}/g" docs/index.html docs/my-attestations.html
-          sed -i "s|__GITHUB_REPO__|${GITHUB_REPOSITORY}|g" docs/index.html docs/my-attestations.html docs/app.js docs/my-attestations.js
+          sed -i "s/__GIT_SHA__/${GITHUB_SHA::8}/g" docs/index.html docs/my-attestations.html docs/repositories.html
+          sed -i "s|__GITHUB_REPO__|${GITHUB_REPOSITORY}|g" docs/index.html docs/my-attestations.html docs/repositories.html docs/app.js docs/my-attestations.js docs/repositories.js
 
       - name: Deploy dashboard
         run: npx wrangler pages deploy docs --project-name action-gate-dashboard --commit-dirty=true

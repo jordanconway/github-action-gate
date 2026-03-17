@@ -1,0 +1,96 @@
+<!--
+SPDX-FileCopyrightText: 2026 The Linux Foundation
+
+SPDX-License-Identifier: Apache-2.0
+-->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Repositories — Action Gate</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      window.ACTION_GATE_API_URL = "https://github-action-gate.pytorch-foundation.workers.dev";
+    </script>
+  </head>
+  <body>
+    <!-- ── Header ─────────────────────────────────────────────── -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="index.html" class="logo">
+          <span class="logo-icon">🔒</span>
+          <span class="logo-text">Action Gate</span>
+        </a>
+
+        <div class="header-actions">
+          <div id="user-info" class="user-info" hidden>
+            <img id="user-avatar" class="user-avatar" src="" alt="" />
+            <span id="user-login" class="user-login"></span>
+            <button id="btn-logout" class="btn btn-secondary btn-sm">Logout</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- ── Page header ──────────────────────────────────────── -->
+      <section class="page-header">
+        <div class="page-header-inner">
+          <div>
+            <h1 class="page-title">Repositories</h1>
+            <p class="page-subtitle">All repositories tracked by Action Gate.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Table ────────────────────────────────────────────── -->
+      <section class="table-section">
+        <div id="loading" class="loading-state" aria-live="polite">Loading…</div>
+        <div id="error-msg" class="error-state" hidden></div>
+
+        <div class="table-wrapper" id="table-wrapper" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Repository</th>
+                <th>Mode</th>
+                <th>Active Attestations</th>
+                <th>Expiry (days)</th>
+                <th>Added</th>
+              </tr>
+            </thead>
+            <tbody id="repos-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination" hidden>
+          <button id="btn-prev" class="btn btn-secondary" disabled>← Previous</button>
+          <span id="page-info"></span>
+          <button id="btn-next" class="btn btn-secondary">Next →</button>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          Action Gate
+          <!-- __GIT_SHA__ is replaced at deploy time by CI -->
+          <span id="deploy-sha" class="deploy-sha">__GIT_SHA__</span>
+          &mdash;
+          <a
+            href="https://github.com/__GITHUB_REPO__"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </p>
+      </div>
+    </footer>
+
+    <script src="repositories.js"></script>
+  </body>
+</html>
