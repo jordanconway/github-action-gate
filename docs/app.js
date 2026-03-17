@@ -115,6 +115,17 @@ function renderRow(a) {
   const { label, cls } = expiryStatus(a.expiresAt, a.revokedAt);
   const statusBadge = `<span class="badge ${cls}">${label}</span>`;
 
+  // Show a Revoke button only when logged in, attestation is active, and user is the voucher.
+  const token = getAuthToken();
+  let actionsCell = "";
+  if (token && !a.revokedAt && new Date(a.expiresAt) > new Date()) {
+    actionsCell = `<button class="btn btn-danger btn-sm btn-revoke"
+      data-id="${escapeHtml(a.id)}"
+      data-repo="${repo}"
+      data-workflow="${escapeHtml(a.workflowPath)}"
+      title="Revoke this attestation">Revoke</button>`;
+  }
+
   return `<tr>
     <td class="mono">${repo}</td>
     <td>${workflowJob}</td>
@@ -125,12 +136,13 @@ function renderRow(a) {
     <td>${notes}</td>
     <td>${expiry}</td>
     <td>${statusBadge}</td>
+    <td>${actionsCell}</td>
   </tr>`;
 }
 
 function renderTable(data) {
   if (!data.attestations || data.attestations.length === 0) {
-    els.tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--color-muted);padding:32px;">No attestations found matching these filters.</td></tr>`;
+    els.tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:var(--color-muted);padding:32px;">No attestations found matching these filters.</td></tr>`;
   } else {
     els.tbody.innerHTML = data.attestations.map(renderRow).join("");
   }
@@ -830,6 +842,88 @@ document.addEventListener("click", (e) => {
 });
 
 $("btn-refresh-runs").addEventListener("click", loadRecentRuns);
+
+// ── Revoke modal ──────────────────────────────────────────────────────────────
+
+let pendingRevokeId = null;
+
+function openRevokeModal(id, repo, workflow) {
+  pendingRevokeId = id;
+  $("revoke-modal-desc").textContent =
+    `Revoke the attestation for ${workflow} in ${repo}? This cannot be undone.`;
+  $("revoke-modal-error").hidden = true;
+  $("revoke-confirm").disabled = false;
+  $("revoke-confirm").textContent = "Revoke";
+  $("revoke-modal").hidden = false;
+  document.body.style.overflow = "hidden";
+}
+
+function closeRevokeModal() {
+  $("revoke-modal").hidden = true;
+  document.body.style.overflow = "";
+  pendingRevokeId = null;
+}
+
+$("revoke-modal-close").addEventListener("click", closeRevokeModal);
+$("revoke-cancel").addEventListener("click", closeRevokeModal);
+$("revoke-modal").addEventListener("click", (e) => {
+  if (e.target === $("revoke-modal")) closeRevokeModal();
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("revoke-modal").hidden) closeRevokeModal();
+});
+
+$("revoke-confirm").addEventListener("click", async () => {
+  if (!pendingRevokeId) return;
+  const token = getAuthToken();
+  if (!token) {
+    $("revoke-modal-error").textContent = "You must be logged in to revoke attestations.";
+    $("revoke-modal-error").hidden = false;
+    return;
+  }
+
+  $("revoke-confirm").disabled = true;
+  $("revoke-confirm").textContent = "Revoking\u2026";
+  $("revoke-modal-error").hidden = true;
+
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/attestations/${encodeURIComponent(pendingRevokeId)}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        clearAuthToken();
+        showLoggedOut();
+        closeRevokeModal();
+        alert("Your session has expired \u2014 please log in again.");
+        return;
+      }
+      $("revoke-modal-error").textContent = data.error || `HTTP ${res.status}`;
+      $("revoke-modal-error").hidden = false;
+      $("revoke-confirm").disabled = false;
+      $("revoke-confirm").textContent = "Revoke";
+      return;
+    }
+
+    closeRevokeModal();
+    await Promise.all([loadSummary(), loadAttestations(), loadRecentRuns()]);
+  } catch (err) {
+    $("revoke-modal-error").textContent = `Request failed: ${err.message}`;
+    $("revoke-modal-error").hidden = false;
+    $("revoke-confirm").disabled = false;
+    $("revoke-confirm").textContent = "Revoke";
+  }
+});
+
+// Revoke buttons inside the attestation table — open the confirm modal.
+document.addEventListener("click", (e) => {
+  const btn = e.target.closest(".btn-revoke");
+  if (!btn) return;
+  openRevokeModal(btn.dataset.id, btn.dataset.repo, btn.dataset.workflow);
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 

@@ -149,6 +149,8 @@ pre code { background: none; border: none; padding: 0; }
 .btn:hover:not(:disabled) { opacity: 0.85; }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .btn-primary { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+.btn-danger  { background: var(--color-danger);  border-color: var(--color-danger);  color: #fff; }
+.btn-danger:hover { opacity: 0.85; }
 .btn-secondary { background: var(--color-surface); color: var(--color-text); }
 
 .btn-sm { padding: 3px 10px; font-size: 0.78rem; }
@@ -355,6 +357,10 @@ tbody tr:hover { background: color-mix(in srgb, var(--color-surface) 80%, var(--
   overflow-y: auto;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.55);
 }
+.modal-box-sm { max-width: 440px; }
+.modal-box-sm .modal-desc { padding: 16px 20px 0; color: var(--color-text); line-height: 1.5; }
+.modal-box-sm .form-error { margin: 12px 20px 0; }
+.modal-box-sm .form-actions { padding: 16px 20px 20px; }
 .modal-header {
   display: flex;
   align-items: center;

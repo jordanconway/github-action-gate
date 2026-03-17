@@ -189,10 +189,27 @@
                   Expires <span class="sort-icon"></span>
                 </th>
                 <th data-col="status">Status</th>
+                <th></th>
               </tr>
             </thead>
             <tbody id="attestations-body"></tbody>
           </table>
+        </div>
+
+        <!-- Revoke confirmation modal -->
+        <div id="revoke-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="revoke-modal-title">
+          <div class="modal-box modal-box-sm">
+            <div class="modal-header">
+              <h3 id="revoke-modal-title">Revoke attestation</h3>
+              <button id="revoke-modal-close" class="modal-close" aria-label="Close">&times;</button>
+            </div>
+            <p id="revoke-modal-desc" class="modal-desc">Are you sure you want to revoke this attestation?</p>
+            <div id="revoke-modal-error" class="form-error" hidden></div>
+            <div class="form-actions">
+              <button id="revoke-cancel" class="btn btn-secondary">Cancel</button>
+              <button id="revoke-confirm" class="btn btn-danger">Revoke</button>
+            </div>
+          </div>
         </div>
 
         <!-- Pagination -->
