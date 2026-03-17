@@ -151,7 +151,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Stamp git SHA into dashboard
-        run: sed -i "s/__GIT_SHA__/${GITHUB_SHA::8}/g" docs/index.html
+        run: sed -i "s/__GIT_SHA__/${GITHUB_SHA::8}/g" docs/index.html docs/my-attestations.html
 
       - name: Deploy dashboard
         run: npx wrangler pages deploy docs --project-name action-gate-dashboard

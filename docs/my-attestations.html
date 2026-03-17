@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>My Attestations — Action Gate</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script>
+      window.ACTION_GATE_API_URL = "https://github-action-gate.pytorch-foundation.workers.dev";
+    </script>
+  </head>
+  <body>
+    <!-- ── Header ─────────────────────────────────────────────── -->
+    <header class="site-header">
+      <div class="container header-inner">
+        <a href="index.html" class="logo">
+          <span class="logo-icon">🔒</span>
+          <span class="logo-text">Action Gate</span>
+        </a>
+
+        <div class="header-actions">
+          <div id="user-info" class="user-info" hidden>
+            <img id="user-avatar" class="user-avatar" src="" alt="" />
+            <span id="user-login" class="user-login"></span>
+            <button id="btn-logout" class="btn btn-secondary btn-sm">Logout</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container">
+      <!-- ── Not logged in ────────────────────────────────────── -->
+      <section id="login-prompt" class="login-prompt" hidden>
+        <h2>Login required</h2>
+        <p>You must be logged in to view your attestations.</p>
+        <a href="index.html" class="btn btn-primary">Go to Dashboard</a>
+      </section>
+
+      <!-- ── User page header ─────────────────────────────────── -->
+      <section id="page-header" class="page-header" hidden>
+        <div class="page-header-inner">
+          <div>
+            <h1 id="page-title" class="page-title">My Attestations</h1>
+            <p class="page-subtitle">Attestations you have created across all repositories.</p>
+          </div>
+          <div class="page-header-actions">
+            <select id="filter-status" class="filter-select">
+              <option value="all">All statuses</option>
+              <option value="active">Active only</option>
+              <option value="expiring">Expiring soon</option>
+            </select>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── Stats ────────────────────────────────────────────── -->
+      <section id="my-stats" class="stats-grid" hidden>
+        <div class="stat-card" id="stat-active">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Active</div>
+        </div>
+        <div class="stat-card warning" id="stat-expiring">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Expiring (30 days)</div>
+        </div>
+        <div class="stat-card" id="stat-revoked">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Revoked</div>
+        </div>
+        <div class="stat-card" id="stat-total">
+          <div class="stat-value">—</div>
+          <div class="stat-label">Total</div>
+        </div>
+      </section>
+
+      <!-- ── Table ────────────────────────────────────────────── -->
+      <section id="table-section" class="table-section" hidden>
+        <div id="loading" class="loading-state" aria-live="polite">Loading…</div>
+        <div id="error-msg" class="error-state" hidden></div>
+
+        <div class="table-wrapper" id="table-wrapper" hidden>
+          <table>
+            <thead>
+              <tr>
+                <th>Repository</th>
+                <th>Workflow / Job</th>
+                <th>Tier</th>
+                <th>Affiliation</th>
+                <th>Org (verified)</th>
+                <th>Notes</th>
+                <th>Created</th>
+                <th>Expires</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="attestations-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" id="pagination" hidden>
+          <button id="btn-prev" class="btn btn-secondary" disabled>← Previous</button>
+          <span id="page-info"></span>
+          <button id="btn-next" class="btn btn-secondary">Next →</button>
+        </div>
+      </section>
+
+      <!-- ── Revoke confirmation modal ────────────────────────── -->
+      <div id="revoke-modal" class="modal-backdrop" hidden role="dialog" aria-modal="true" aria-labelledby="revoke-modal-title">
+        <div class="modal-box modal-box-sm">
+          <div class="modal-header">
+            <h3 id="revoke-modal-title">Revoke attestation</h3>
+            <button id="revoke-modal-close" class="modal-close" aria-label="Close">&times;</button>
+          </div>
+          <p id="revoke-modal-desc" class="modal-desc">Are you sure you want to revoke this attestation?</p>
+          <div id="revoke-modal-error" class="form-error" hidden></div>
+          <div class="form-actions">
+            <button id="revoke-cancel" class="btn btn-secondary">Cancel</button>
+            <button id="revoke-confirm" class="btn btn-danger">Revoke</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <p>
+          Action Gate
+          <!-- __GIT_SHA__ is replaced at deploy time by CI -->
+          <span id="deploy-sha" class="deploy-sha">__GIT_SHA__</span>
+          &mdash;
+          <a
+            href="https://github.com/jordanconway/github-action-gate"
+            target="_blank"
+            rel="noopener noreferrer"
+            >GitHub</a
+          >
+        </p>
+      </div>
+    </footer>
+
+    <script src="my-attestations.js"></script>
+  </body>
+</html>
