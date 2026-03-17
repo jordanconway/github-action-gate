@@ -1,6 +1,6 @@
 version = 1
 SPDX-PackageName = "github-action-gate"
-SPDX-PackageSupplier = "https://github.com/jordanconway/github-action-gate"
+SPDX-PackageSupplier = "https://github.com/linuxfoundation/github-action-gate"
 
 [[annotations]]
 path = ["package.json", "package-lock.json", "tsconfig.json", "tsconfig.worker.json", ".markdownlint.json", ".prettierrc", ".prettierignore"]
