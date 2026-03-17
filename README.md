@@ -279,6 +279,13 @@ Users can log in with their GitHub account via the **Login with GitHub** button
 to create attestations directly from the UI, including batch vouching from
 the recent workflow runs table.
 
+- **Revoke** — each active attestation in the table has a Revoke button
+  (visible when logged in). The server enforces that only the original
+  voucher or a repository admin can revoke.
+- **My Attestations** (`my-attestations.html`) — a dedicated page showing
+  all attestations created by the logged-in user, with status filters
+  (all / active / expiring soon), summary stats, and revoke support.
+
 ---
 
 ## Development

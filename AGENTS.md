@@ -85,6 +85,7 @@ The deploy step in CI stamps the git SHA into the dashboard footer via
 | `src/services/gate.ts` | Gate evaluation logic + check run output |
 | `src/handlers/` | Webhook handlers (PR, workflow-run, workflow-job) |
 | `docs/` | Static dashboard (deployed to Cloudflare Pages) |
+| `docs/my-attestations.html` | Per-user attestation view + revoke UI |
 | `scripts/patch-prisma-for-workers.sh` | Post-generate Prisma patch for Workers WASM |
 | `.github/workflows/ci.yml` | Lint + Test + Deploy pipeline |
 
@@ -94,5 +95,6 @@ The deploy step in CI stamps the git SHA into the dashboard footer via
   query compiler must be statically imported (see patch script).
 - Wrangler reads from `dist-worker/`, not `src/`. Always `npm run build`
   after source changes before manual deploys.
-- The `__GIT_SHA__` placeholder in `docs/index.html` is replaced by CI
-  at deploy time — don't change it to a real hash in source.
+- The `__GIT_SHA__` placeholder in `docs/index.html` and
+  `docs/my-attestations.html` is replaced by CI at deploy time —
+  don't change it to a real hash in source.
