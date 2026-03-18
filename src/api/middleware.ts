@@ -27,6 +27,7 @@ interface CacheEntry {
   user: GitHubUser;
   expiresAt: number;
 }
+const MAX_CACHE_SIZE = 500;
 const tokenCache = new Map<string, CacheEntry>();
 const CACHE_TTL_MS = 2 * 60 * 1_000;
 
@@ -56,6 +57,9 @@ export async function authenticateUser(
   // Serve from cache first.
   const cached = tokenCache.get(tokenKey);
   if (cached && cached.expiresAt > Date.now()) {
+    // Re-insert to move this entry to the end (most-recently-used).
+    tokenCache.delete(tokenKey);
+    tokenCache.set(tokenKey, cached);
     req.user = cached.user;
     req.token = token;
     next();
@@ -76,12 +80,11 @@ export async function authenticateUser(
 
     tokenCache.set(tokenKey, { user, expiresAt: Date.now() + CACHE_TTL_MS });
 
-    // Prune stale entries once the cache gets large.
-    if (tokenCache.size > 500) {
-      const now = Date.now();
-      for (const [k, v] of tokenCache) {
-        if (v.expiresAt < now) tokenCache.delete(k);
-      }
+    // Evict oldest entries when the cache exceeds its bound.
+    // Map iterates in insertion order, so the first key is the oldest.
+    while (tokenCache.size > MAX_CACHE_SIZE) {
+      const oldest = tokenCache.keys().next().value;
+      if (oldest !== undefined) tokenCache.delete(oldest);
     }
 
     req.user = user;

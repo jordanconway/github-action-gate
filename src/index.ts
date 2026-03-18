@@ -21,22 +21,27 @@ export default function actionGate(bot: Probot, { getRouter }: AppOptions) {
   // ── REST API ───────────────────────────────────────────────────────────────
   const router = getRouter("/");
 
-  // CORS — restrict in production to your GitHub Pages origin.
-  const allowedOrigins = process.env.CORS_ORIGINS ?? "*";
-  if (allowedOrigins === "*" && process.env.NODE_ENV === "production") {
+  // CORS — restrict in production to your dashboard origin(s).
+  const rawOrigins = process.env.CORS_ORIGINS?.trim();
+  const allowedOrigins =
+    rawOrigins && rawOrigins !== "*"
+      ? rawOrigins
+      : process.env.DASHBOARD_URL?.trim() || null;
+
+  if (!allowedOrigins && process.env.NODE_ENV === "production") {
     bot.log.warn(
-      "CORS is set to allow all origins (*). Set the CORS_ORIGINS environment " +
-        "variable to your dashboard origin(s) to restrict cross-origin access."
+      "CORS_ORIGINS is not set and DASHBOARD_URL is missing — CORS will reject " +
+        "cross-origin requests. Set CORS_ORIGINS to the dashboard origin(s)."
     );
   }
   router.use(
     cors(
-      allowedOrigins === "*"
-        ? undefined
-        : {
+      allowedOrigins
+        ? {
             origin: allowedOrigins.split(",").map((o) => o.trim()),
             methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
           }
+        : process.env.NODE_ENV === "production" ? { origin: false } : undefined
     )
   );
 
@@ -48,7 +53,7 @@ export default function actionGate(bot: Probot, { getRouter }: AppOptions) {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+      "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' https://avatars.githubusercontent.com data:; connect-src 'self' https:; " +
         "font-src 'self'; frame-ancestors 'none'; form-action 'self'"
     );

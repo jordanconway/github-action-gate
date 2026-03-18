@@ -19,6 +19,8 @@ import { logger } from "../logger.js";
 
 // GitHub owner/repo names: alphanumeric, hyphens, dots, underscores; max 100 chars.
 const GITHUB_NAME_RE = /^[a-zA-Z0-9._-]{1,100}$/;
+// Workflow paths: alphanumeric, hyphens, dots, underscores, slashes; max 260 chars.
+const WORKFLOW_PATH_RE = /^[a-zA-Z0-9._\-/]{1,260}$/;
 // CUID format used by Prisma @default(cuid()) — 25-char lowercase alphanumeric.
 const CUID_RE = /^c[a-z0-9]{24}$/;
 // Maximum expiry for attestations — 2 years.
@@ -27,6 +29,20 @@ const MAX_EXPIRY_DAYS = 730;
 /** Express 5 params are `string | string[]` — extract the scalar string. */
 function str(v: string | string[] | undefined): string {
   return Array.isArray(v) ? v[0] : v ?? "";
+}
+
+/**
+ * Validate optional query-string name parameters.
+ * Returns the first invalid parameter name, or null if all are valid.
+ */
+function validateNameParams(
+  params: Record<string, string | undefined>,
+  pattern: RegExp = GITHUB_NAME_RE
+): string | null {
+  for (const [name, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "" && !pattern.test(value)) return name;
+  }
+  return null;
 }
 
 /** Fire-and-forget audit log write. Never blocks the response. */
@@ -68,6 +84,20 @@ export function createApiRouter(): Router {
   router.get("/attestations", async (req: Request, res: Response) => {
     try {
       const q = req.query as Record<string, string>;
+
+      // Validate name-like parameters against their expected patterns.
+      const badName = validateNameParams({
+        owner: q.owner, repo: q.repo, voucher: q.voucher, org: q.org,
+      });
+      if (badName) {
+        res.status(400).json({ error: `Invalid ${badName} parameter` });
+        return;
+      }
+      if (q.workflow && !WORKFLOW_PATH_RE.test(q.workflow)) {
+        res.status(400).json({ error: "Invalid workflow parameter" });
+        return;
+      }
+
       const result = await listAttestations({
         owner: q.owner,
         repo: q.repo,
@@ -801,6 +831,12 @@ export function createApiRouter(): Router {
     try {
       const q = req.query as Record<string, string>;
       const limit = Math.min(Math.max(1, parseInt(q.limit ?? "10", 10) || 10), 50);
+
+      const badName = validateNameParams({ owner: q.owner, repo: q.repo });
+      if (badName) {
+        res.status(400).json({ error: `Invalid ${badName} parameter` });
+        return;
+      }
 
       const repoFilter: { owner?: string; name?: string } = {};
       if (q.owner) repoFilter.owner = q.owner;

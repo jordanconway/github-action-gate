@@ -27,7 +27,6 @@ import { Octokit } from "@octokit/rest";
 import { createAppAuth } from "@octokit/auth-app";
 import cors from "cors";
 import express from "express";
-import rateLimit from "express-rate-limit";
 
 // ── Env type ──────────────────────────────────────────────────────────────────
 
@@ -180,15 +179,25 @@ function buildExpressApp(env: Env): express.Express {
   }
 
   // CORS
-  const allowedOrigins = env.CORS_ORIGINS ?? "*";
+  const rawOrigins = env.CORS_ORIGINS?.trim();
+  const allowedOrigins =
+    rawOrigins && rawOrigins !== "*"
+      ? rawOrigins
+      : env.DASHBOARD_URL?.trim() || null;
+
+  if (!allowedOrigins) {
+    logger.warn("CORS_ORIGINS is not set and DASHBOARD_URL is missing — CORS will reject cross-origin requests. " +
+      "Set CORS_ORIGINS to the dashboard origin(s) or DASHBOARD_URL to allow cross-origin API access.");
+  }
+
   app.use(
     cors(
-      allowedOrigins === "*"
-        ? undefined
-        : {
+      allowedOrigins
+        ? {
             origin: allowedOrigins.split(",").map((o) => o.trim()),
             methods: ["GET", "POST", "DELETE", "PUT", "OPTIONS"],
           }
+        : { origin: false }
     )
   );
 
@@ -200,7 +209,7 @@ function buildExpressApp(env: Env): express.Express {
     res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; " +
+      "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; " +
         "img-src 'self' https://avatars.githubusercontent.com data:; connect-src 'self' https:; " +
         "font-src 'self'; frame-ancestors 'none'; form-action 'self'"
     );
@@ -208,25 +217,14 @@ function buildExpressApp(env: Env): express.Express {
     next();
   });
 
-  // Rate limiting
-  const apiLimiter = rateLimit({
-    windowMs: 60_000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many requests — please try again later" },
-  });
-  const authLimiter = rateLimit({
-    windowMs: 60_000,
-    max: 20,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: "Too many authentication requests — please try again later" },
-  });
+  // Note: express-rate-limit is not effective on Cloudflare Workers because
+  // each isolate has its own in-memory store that resets unpredictably.
+  // Use Cloudflare's built-in rate limiting rules (WAF → Rate Limiting) for
+  // production rate limiting.  The middleware is intentionally omitted here.
 
   app.use(express.json({ limit: "256kb" }));
-  app.use("/api/v1", apiLimiter, createApiRouter());
-  app.use("/auth", authLimiter, createAuthRouter());
+  app.use("/api/v1", createApiRouter());
+  app.use("/auth", createAuthRouter());
 
   return app;
 }
