@@ -793,7 +793,9 @@ export function createApiRouter(): Router {
 
       const [totalRepos, totalAttestations, activeAttestations, expiringSoon] = await Promise.all([
         prisma.repository.count(),
-        prisma.attestation.count(),
+        prisma.attestation.count({
+          where: { revokedAt: null },
+        }),
         prisma.attestation.count({
           where: { revokedAt: null, expiresAt: { gt: now } },
         }),
